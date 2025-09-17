@@ -48,7 +48,7 @@ jobs:
           path: android/app/build/outputs/apk/release/app-release.apk
 
   ios:
-    name: Build iOS IPA
+    name: Build iOS Release IPA
     runs-on: macos-latest
 
     steps:
@@ -68,30 +68,45 @@ jobs:
           cd ios
           pod install
 
-      - name: Build iOS App (Simulator)
+      # Decode and install certificates/profiles
+      - name: Setup Signing
+        run: |
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "$IOS_PROVISION_PROFILE_BASE64" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/app.mobileprovision
+          
+          echo "$IOS_CERTIFICATE_BASE64" | base64 --decode > certificate.p12
+          security create-keychain -p github actions.keychain
+          security import certificate.p12 -k ~/Library/Keychains/actions.keychain -P "$IOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security list-keychains -s ~/Library/Keychains/actions.keychain
+          security default-keychain -s ~/Library/Keychains/actions.keychain
+          security unlock-keychain -p github ~/Library/Keychains/actions.keychain
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k github ~/Library/Keychains/actions.keychain
+
+      # Build and archive
+      - name: Build and Archive
         run: |
           cd ios
           xcodebuild -workspace cicddemo.xcworkspace \
                      -scheme cicddemo \
-                     -configuration Debug \
-                     -sdk iphonesimulator \
-                     -derivedDataPath build
+                     -configuration Release \
+                     -archivePath build/cicddemo.xcarchive \
+                     DEVELOPMENT_TEAM=$APPLE_TEAM_ID \
+                     PRODUCT_BUNDLE_IDENTIFIER=$APPLE_BUNDLE_ID \
+                     CODE_SIGN_IDENTITY="$APPLE_SIGNING_IDENTITY" \
+                     archive
 
-      - name: Package IPA (Debug)
+      # Export IPA
+      - name: Export IPA
         run: |
-          mkdir -p ios/build/ipa
-          xcodebuild -workspace ios/cicddemo.xcworkspace \
-                     -scheme cicddemo \
-                     -configuration Debug \
-                     -sdk iphoneos \
-                     -archivePath ios/build/cicddemo.xcarchive archive
+          cd ios
           xcodebuild -exportArchive \
-                     -archivePath ios/build/cicddemo.xcarchive \
-                     -exportOptionsPlist ios/exportOptions.plist \
-                     -exportPath ios/build/ipa
+                     -archivePath build/cicddemo.xcarchive \
+                     -exportOptionsPlist exportOptions.plist \
+                     -exportPath build/ipa
 
+      # Upload artifact
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ios-ipa
+          name: ios-ipa-release
           path: ios/build/ipa/*.ipa
