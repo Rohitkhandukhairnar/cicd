@@ -6,7 +6,6 @@ function DemoScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>Demo Screen</Text>
       <Text>Welcome to your React Navigation setup.</Text>
-      
       </View>
         
   );
