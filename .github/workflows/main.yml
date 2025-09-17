@@ -67,6 +67,12 @@ jobs:
         run: |
           cd ios
           pod install
+          
+      - name: Debug decoded certificate
+        run: |
+          echo "$IOS_CERTIFICATE_BASE64" | base64 --decode > certificate.p12
+          file certificate.p12
+          openssl pkcs12 -in certificate.p12 -nokeys -passin pass:$IOS_CERTIFICATE_PASSWORD
 
       # Decode and install certificates/profiles
       - name: Setup Signing
