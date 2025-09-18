@@ -88,33 +88,31 @@ jobs:
           security unlock-keychain -p github ~/Library/Keychains/actions.keychain
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k github ~/Library/Keychains/actions.keychain
 
-      - name: Build IPA
+       # Build and archive
+      - name: Build and Archive
         run: |
           cd ios
-          # Clean first
-          xcodebuild clean \
-            -workspace cicddemo.xcworkspace \
-            -scheme cicddemo \
-            -configuration Release
+          xcodebuild -workspace cicddemo.xcworkspace \
+                     -scheme cicddemo \
+                     -configuration Release \
+                     -archivePath build/cicddemo.xcarchive \
+                     DEVELOPMENT_TEAM=$APPLE_TEAM_ID \
+                     PRODUCT_BUNDLE_IDENTIFIER=$APPLE_BUNDLE_ID \
+                     CODE_SIGN_IDENTITY="$APPLE_SIGNING_IDENTITY" \
+                     archive
 
-          # Archive build
-          xcodebuild archive \
-            -workspace cicddemo.xcworkspace \
-            -scheme cicddemo \
-            -sdk iphoneos \
-            -configuration Release \
-            -archivePath $PWD/build/cicddemo.xcarchive \
-            -allowProvisioningUpdates
-
-          # Export IPA
+      # Export IPA
+      - name: Export IPA
+        run: |
+          cd ios
           xcodebuild -exportArchive \
-            -archivePath $PWD/build/cicddemo.xcarchive \
-            -exportOptionsPlist exportOptions.plist \
-            -exportPath $PWD/build/ipa \
-            -allowProvisioningUpdates
+                     -archivePath build/cicddemo.xcarchive \
+                     -exportOptionsPlist exportOptions.plist \
+                     -exportPath build/ipa
 
+      # Upload artifact
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ios-ipa
+          name: ios-ipa-release
           path: ios/build/ipa/*.ipa
