@@ -47,72 +47,108 @@ jobs:
           name: android-apk-release
           path: android/app/build/outputs/apk/release/app-release.apk
 
-  ios:
-    name: Build iOS Release IPA
+  ios-release:
+    name: Build iOS Release IPA (signed, debug-friendly)
     runs-on: macos-latest
-
+    env:
+      # replace these with your values or set as secrets
+      APP_BUNDLE_ID: ${{ secrets.APP_BUNDLE_ID }}        # e.g. com.weapp.cicddemo
+      APP_TEAM_ID: ${{ secrets.APP_TEAM_ID }}            # e.g. AB12C3DE45
+      APP_PROFILE_NAME: ${{ secrets.APP_PROFILE_NAME }}  # provisioning profile name (as in Apple Dev portal)
+      IOS_SIGNING_IDENTITY: ${{ secrets.IOS_SIGNING_IDENTITY }} # e.g. "Apple Distribution"
     steps:
-      - name: Checkout Repository
+      - name: Checkout
         uses: actions/checkout@v4
-
+  
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 18
-
-      - name: Install Dependencies
-        run: npm install
-
-      - name: Install Pods
+  
+      - name: Install dependencies
+        run: npm ci
+  
+      - name: Install CocoaPods
         run: |
           cd ios
-          pod install
-          
-      - name: Debug decoded certificate
+          pod install --repo-update
+  
+      # ---------- Decode + debug the uploaded secrets ----------
+      - name: Decode certificate & provisioning (debug)
         run: |
-          echo "$IOS_CERTIFICATE_BASE64" | base64 --decode > certificate.p12
-          file certificate.p12
-          openssl pkcs12 -in certificate.p12 -nokeys -passin pass:$IOS_CERTIFICATE_PASSWORD
-
-      # Decode and install certificates/profiles
-      - name: Setup Signing
-        run: |
+          set -euo pipefail
+          echo "Writing mobileprovision..."
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          echo "$IOS_PROVISION_PROFILE_BASE64" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/app.mobileprovision
-          
-          echo "$IOS_CERTIFICATE_BASE64" | base64 --decode > certificate.p12
-          security create-keychain -p github actions.keychain
-          security import certificate.p12 -k ~/Library/Keychains/actions.keychain -P "$IOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-          security list-keychains -s ~/Library/Keychains/actions.keychain
-          security default-keychain -s ~/Library/Keychains/actions.keychain
-          security unlock-keychain -p github ~/Library/Keychains/actions.keychain
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k github ~/Library/Keychains/actions.keychain
-
-      # Build and archive
-      - name: Build and Archive
+          echo "$IOS_PROVISION_PROFILE_BASE64" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/app.mobileprovision || true
+          echo "mobileprovision size:"
+          ls -lh ~/Library/MobileDevice/Provisioning\ Profiles/app.mobileprovision || true
+          echo "Dump mobileprovision to plist to inspect Name and UUID"
+          security cms -D -i ~/Library/MobileDevice/Provisioning\ Profiles/app.mobileprovision -o /tmp/profile.plist || true
+          /usr/libexec/PlistBuddy -c "Print :Name" /tmp/profile.plist || true
+          /usr/libexec/PlistBuddy -c "Print :UUID" /tmp/profile.plist || true
+  
+          echo "Decoding certificate..."
+          echo "$IOS_CERTIFICATE_BASE64" | base64 --decode > certificate.p12 || true
+          ls -lh certificate.p12 || true
+          file certificate.p12 || true
+  
+          echo "Check certificate content with openssl (will fail if file wrong or password wrong)"
+          openssl pkcs12 -in certificate.p12 -nokeys -passin pass:$IOS_CERTIFICATE_PASSWORD -info || true
+  
+      # ---------- Create keychain + import the cert ----------
+      - name: Create keychain and import cert
         run: |
+          set -euo pipefail
+          KEYCHAIN=actions.keychain
+          KEYCHAIN_PASS=github
+          # create keychain
+          security create-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN"
+          # make it default for the session
+          security list-keychains -s ~/Library/Keychains/"$KEYCHAIN" || true
+          security default-keychain -s ~/Library/Keychains/"$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASS" ~/Library/Keychains/"$KEYCHAIN"
+          # import certificate (use -A to allow codesign)
+          security import certificate.p12 -k ~/Library/Keychains/"$KEYCHAIN" -P "$IOS_CERTIFICATE_PASSWORD" -A
+          # verify identities are present
+          security find-identity -v -p codesigning
+  
+      # ---------- Build & archive ----------
+      - name: Xcode Archive (Release)
+        run: |
+          set -euo pipefail
           cd ios
+  
+          # Ensure exportOptions.plist exists in ios/ (you must commit it). It should match APP_BUNDLE_ID & profile name.
+          echo "Export options plist contents:"
+          cat exportOptions.plist || true
+  
+          # Archive app
           xcodebuild -workspace cicddemo.xcworkspace \
                      -scheme cicddemo \
                      -configuration Release \
                      -archivePath build/cicddemo.xcarchive \
-                     DEVELOPMENT_TEAM=$APPLE_TEAM_ID \
-                     PRODUCT_BUNDLE_IDENTIFIER=$APPLE_BUNDLE_ID \
-                     CODE_SIGN_IDENTITY="$APPLE_SIGNING_IDENTITY" \
-                     archive
-
-      # Export IPA
+                     DEVELOPMENT_TEAM=$APP_TEAM_ID \
+                     PRODUCT_BUNDLE_IDENTIFIER=$APP_BUNDLE_ID \
+                     CODE_SIGN_STYLE=Manual \
+                     clean archive | tee /tmp/xcode_archive.log
+  
       - name: Export IPA
         run: |
+          set -euo pipefail
           cd ios
+          # Export archive to ipa using your exportOptions.plist (manual signing)
           xcodebuild -exportArchive \
                      -archivePath build/cicddemo.xcarchive \
                      -exportOptionsPlist exportOptions.plist \
-                     -exportPath build/ipa
-
-      # Upload artifact
+                     -exportPath build/ipa | tee /tmp/xcode_export.log
+  
+      - name: List produced IPA
+        run: |
+          ls -la ios/build/ipa || true
+          file ios/build/ipa/*.ipa || true
+  
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ios-ipa-release
+          name: cicddemo-ios-release
           path: ios/build/ipa/*.ipa
