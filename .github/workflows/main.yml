@@ -65,14 +65,13 @@ jobs:
         with:
           node-version: 18
   
-      - name: Install dependencies
-        run: npm ci
-  
-      - name: Install CocoaPods
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Install Pods
         run: |
           cd ios
-          pod install --repo-update
-  
+          pod install
       # ---------- Decode + debug the uploaded secrets ----------
       - name: Decode certificate & provisioning (debug)
         run: |
