@@ -89,30 +89,24 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k github ~/Library/Keychains/actions.keychain
 
        # Build and archive
-      - name: Build and Archive
+      - name: Build IPA
         run: |
           cd ios
+          set -o pipefail
           xcodebuild -workspace cicddemo.xcworkspace \
                      -scheme cicddemo \
+                     -sdk iphoneos \
                      -configuration Release \
                      -archivePath build/cicddemo.xcarchive \
-                     DEVELOPMENT_TEAM=$APPLE_TEAM_ID \
-                     PRODUCT_BUNDLE_IDENTIFIER=$APPLE_BUNDLE_ID \
-                     CODE_SIGN_IDENTITY="$APPLE_SIGNING_IDENTITY" \
-                     archive
-
-      # Export IPA
-      - name: Export IPA
-        run: |
-          cd ios
+                     clean archive | xcpretty
+  
           xcodebuild -exportArchive \
                      -archivePath build/cicddemo.xcarchive \
                      -exportOptionsPlist exportOptions.plist \
-                     -exportPath build/ipa
-
-      # Upload artifact
+                     -exportPath build/ipa | xcpretty
+                     
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ios-ipa-release
+          name: ios-ipa
           path: ios/build/ipa/*.ipa
