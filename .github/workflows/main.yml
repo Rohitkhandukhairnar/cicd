@@ -7,46 +7,7 @@ on:
   pull_request:
 
 jobs:
-  android:
-    name: Build Android APK
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 18
-
-      - name: Install Dependencies
-        run: |
-          npm install
-          cd android && ./gradlew clean
-
-      - name: Build Debug APK
-        run: |
-          cd android
-          ./gradlew assembleDebug
-
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-          
-      - name: Build Release APK
-        run: |
-          cd android
-          ./gradlew assembleRelease
-
-      - name: Upload Release APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-apk-release
-          path: android/app/build/outputs/apk/release/app-release.apk
-
+  
   ios:
     name: Build iOS IPA
     runs-on: macos-latest
@@ -82,40 +43,6 @@ jobs:
           security unlock-keychain -p github ~/Library/Keychains/actions.keychain
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k github ~/Library/Keychains/actions.keychain
 
-      # Debug IPA
-      - name: Build Debug IPA
-        run: |
-          cd ios
-          set -o pipefail
-          xcodebuild clean \
-            -workspace cicddemo.xcworkspace \
-            -scheme cicddemo \
-            -configuration Debug \
-            -destination 'generic/platform=iOS' | xcpretty
-          
-          xcodebuild archive \
-            -workspace cicddemo.xcworkspace \
-            -scheme cicddemo \
-            -sdk iphoneos \
-            -configuration Debug \
-            -destination 'generic/platform=iOS' \
-            -archivePath $PWD/build/cicddemo-debug.xcarchive \
-            DEVELOPMENT_TEAM=$APPLE_TEAM_ID \
-            PRODUCT_BUNDLE_IDENTIFIER=$BUNDLE_ID \
-            -allowProvisioningUpdates | xcpretty
-          
-          xcodebuild -exportArchive \
-            -archivePath $PWD/build/cicddemo-debug.xcarchive \
-            -exportOptionsPlist exportOptions.plist \
-            -exportPath $PWD/build/ipa-debug \
-            -allowProvisioningUpdates | xcpretty
-
-      - name: Upload Debug IPA
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-ipa-debug
-          path: ios/build/ipa-debug/*.ipa
-
       # Release IPA
       - name: Build Release IPA
         run: |
@@ -125,23 +52,24 @@ jobs:
             -workspace cicddemo.xcworkspace \
             -scheme cicddemo \
             -configuration Release | xcpretty
+      
           xcodebuild archive \
             -workspace cicddemo.xcworkspace \
             -scheme cicddemo \
-            -sdk iphoneos \
             -configuration Release \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
             -archivePath $PWD/build/cicddemo-release.xcarchive \
             DEVELOPMENT_TEAM=$APPLE_TEAM_ID \
             PRODUCT_BUNDLE_IDENTIFIER=$BUNDLE_ID \
-            -allowProvisioningUpdates \
-            OTHER_CODE_SIGN_FLAGS="--deep" \
-            COMPILER_INDEX_STORE_ENABLE=NO \
-            -UseModernBuildSystem=YES | xcpretty
+            -allowProvisioningUpdates | xcpretty
+      
           xcodebuild -exportArchive \
             -archivePath $PWD/build/cicddemo-release.xcarchive \
             -exportOptionsPlist exportOptions.plist \
             -exportPath $PWD/build/ipa-release \
             -allowProvisioningUpdates | xcpretty
+
 
 
       - name: Upload Release IPA
