@@ -7,87 +7,75 @@ on:
   pull_request:
 
 jobs:
-  
   ios:
-    name: Build iOS IPA
+    name: Build iOS App
     runs-on: macos-latest
-    env:
-      IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
-      IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
-      IOS_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}
-      APPLE_DEVELOPER_TEAM_ID: ${{ secrets.APPLE_DEVELOPER_TEAM_ID }}
 
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install Node dependencies
-        run: npm install
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install Dependencies
+        run: |
+          yarn install --frozen-lockfile
 
       - name: Install Pods
         run: |
           cd ios
           pod install --repo-update
 
-      - name: Setup Signing
-        run: |
-          # Provisioning profile
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          echo "$IOS_PROVISION_PROFILE_BASE64" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/app.mobileprovision
-
-          # Certificate
-          echo "$IOS_CERTIFICATE_BASE64" | base64 --decode > certificate.p12
-          security create-keychain -p github actions.keychain
-          security import certificate.p12 -k ~/Library/Keychains/actions.keychain -P "$IOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-          security list-keychains -s ~/Library/Keychains/actions.keychain
-          security default-keychain -s ~/Library/Keychains/actions.keychain
-          security unlock-keychain -p github ~/Library/Keychains/actions.keychain
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k github ~/Library/Keychains/actions.keychain
-
-      - name: Build iOS app (Archive)
+      # -------------------------
+      # Debug Build (Simulator)
+      # -------------------------
+      - name: Build Debug App for Simulator
         run: |
           cd ios
-          xcodebuild clean archive \
+          xcodebuild \
+            -workspace cicddemo.xcworkspace \
+            -scheme cicddemo \
+            -sdk iphonesimulator \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/simulator
+
+      - name: Upload Debug .app (Simulator)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-debug-simulator-app
+          path: ios/build/simulator/Build/Products/Debug-iphonesimulator/cicddemo.app
+
+      # -------------------------
+      # Release IPA (Device)
+      # -------------------------
+      - name: Build iOS Release IPA
+        run: |
+          cd ios
+          xcodebuild clean \
             -workspace cicddemo.xcworkspace \
             -scheme cicddemo \
             -configuration Release \
             -sdk iphoneos \
-            -archivePath $PWD/build/cicddemo.xcarchive \
-            DEVELOPMENT_TEAM=$APPLE_DEVELOPER_TEAM_ID \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
-            -allowProvisioningUpdates
-
-      - name: Export IPA
-        run: |
-          cd ios
-          # create exportOptions.plist dynamically
-          cat <<EOF > exportOptions.plist
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>app-store</string>
-            <key>teamID</key>
-            <string>${APPLE_DEVELOPER_TEAM_ID}</string>
-            <key>signingStyle</key>
-            <string>manual</string>
-            <key>stripSwiftSymbols</key>
-            <true/>
-            <key>compileBitcode</key>
-            <false/>
-          </dict>
-          </plist>
-          EOF
+            -destination 'generic/platform=iOS' \
+            -archivePath build/cicddemo.xcarchive archive \
+            CODE_SIGN_IDENTITY="iPhone Distribution" \
+            DEVELOPMENT_TEAM="BV839K2W7C" \
+            PROVISIONING_PROFILE_SPECIFIER="dojowell_appstore" \
+            | xcpretty
 
           xcodebuild -exportArchive \
-            -archivePath $PWD/build/cicddemo.xcarchive \
+            -archivePath build/cicddemo.xcarchive \
             -exportOptionsPlist exportOptions.plist \
-            -exportPath $PWD/build/ipa \
-            -allowProvisioningUpdates
+            -exportPath build/ipa \
+            | xcpretty
 
-      - name: Upload IPA Artifact
+      - name: Upload Release IPA
         uses: actions/upload-artifact@v4
         with:
-          name: ios-ipa
+          name: ios-release-ipa
           path: ios/build/ipa/*.ipa
+
