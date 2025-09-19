@@ -12,70 +12,51 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - name: Checkout Repository
+      # Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Setup Node
+  
+      # Set up Node.js
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
-
-      - name: Install Dependencies
-        run: |
-          npm install --frozen-lockfile
-
+          node-version: '20'
+  
+      # Install dependencies
+      - name: Install dependencies
+        run: npm install
+  
+      # Install CocoaPods
       - name: Install Pods
         run: |
           cd ios
           pod install --repo-update
-
-      # -------------------------
-      # Debug Build (Simulator)
-      # -------------------------
-      - name: Build Debug App for Simulator
+  
+      # Run Jest tests
+      - name: Run Jest tests
+        run: npm test
+  
+      # Build iOS app (Release IPA)
+      - name: Build iOS App
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
         run: |
           cd ios
-          xcodebuild \
-            -workspace cicddemo.xcworkspace \
+          xcodebuild -workspace cicddemo.xcworkspace \
             -scheme cicddemo \
-            -sdk iphonesimulator \
-            -configuration Debug \
-            -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath build/simulator
-
-      - name: Upload Debug .app (Simulator)
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-debug-simulator-app
-          path: ios/build/simulator/Build/Products/Debug-iphonesimulator/cicddemo.app
-
-      # -------------------------
-      # Release IPA (Device)
-      # -------------------------
-      - name: Build iOS Release IPA
-        run: |
-          cd ios
-          xcodebuild clean \
-            -workspace cicddemo.xcworkspace \
-            -scheme cicddemo \
-            -configuration Release \
             -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
-            -archivePath build/cicddemo.xcarchive archive \
-            CODE_SIGN_IDENTITY="iPhone Distribution" \
-            DEVELOPMENT_TEAM="BV839K2W7C" \
-            PROVISIONING_PROFILE_SPECIFIER="dojowell_appstore" \
-            | xcpretty
-
+            -configuration Release \
+            archive -archivePath $PWD/build/cicddemo.xcarchive
+  
           xcodebuild -exportArchive \
-            -archivePath build/cicddemo.xcarchive \
-            -exportOptionsPlist exportOptions.plist \
-            -exportPath build/ipa \
-            | xcpretty
-
-      - name: Upload Release IPA
+            -archivePath $PWD/build/cicddemo.xcarchive \
+            -exportOptionsPlist $PWD/exportOptions.plist \
+            -exportPath $PWD/build
+  
+      # Upload IPA artifact
+      - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: ios-release-ipa
-          path: ios/build/ipa/*.ipa
-
+          name: ios-ipa
+          path: ios/build/*.ipa
