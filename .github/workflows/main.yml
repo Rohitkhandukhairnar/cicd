@@ -43,7 +43,10 @@ jobs:
           security unlock-keychain -p github ~/Library/Keychains/actions.keychain
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k github ~/Library/Keychains/actions.keychain
 
-      # Release IPA
+
+        # -------------------------
+      # Release IPA (Device)
+      # -------------------------
       - name: Build iOS Release IPA
         run: |
           cd ios
@@ -53,18 +56,20 @@ jobs:
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
-            -archivePath build/cicddemo.xcarchive archive
-  
+            -archivePath build/cicddemo.xcarchive archive \
+            CODE_SIGN_IDENTITY="iPhone Distribution" \
+            DEVELOPMENT_TEAM="BV839K2W7C" \
+            PROVISIONING_PROFILE_SPECIFIER="dojowell_appstore" \
+            | xcpretty
+
           xcodebuild -exportArchive \
             -archivePath build/cicddemo.xcarchive \
             -exportOptionsPlist exportOptions.plist \
-            -exportPath build/ipa
-
-
-
+            -exportPath build/ipa \
+            | xcpretty
 
       - name: Upload Release IPA
         uses: actions/upload-artifact@v4
         with:
-          name: ios-ipa-release
-          path: ios/build/ipa-release/*.ipa
+          name: ios-release-ipa
+          path: ios/build/ipa/*.ipa
