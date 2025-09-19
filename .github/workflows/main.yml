@@ -73,8 +73,8 @@ jobs:
         run: |
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           echo "$IOS_PROVISION_PROFILE_BASE64" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/app.mobileprovision
-
           echo "$IOS_CERTIFICATE_BASE64" | base64 --decode > certificate.p12
+          
           security create-keychain -p github actions.keychain
           security import certificate.p12 -k ~/Library/Keychains/actions.keychain -P "$IOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
           security list-keychains -s ~/Library/Keychains/actions.keychain
@@ -82,30 +82,65 @@ jobs:
           security unlock-keychain -p github ~/Library/Keychains/actions.keychain
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k github ~/Library/Keychains/actions.keychain
 
-      - name: Build IPA
+      - name: Build Debug IPA
         run: |
           cd ios
+          set -o pipefail
           xcodebuild clean \
             -workspace cicddemo.xcworkspace \
             -scheme cicddemo \
-            -configuration Release
-          
+            -configuration Debug | xcpretty
+
+          xcodebuild archive \
+            -workspace cicddemo.xcworkspace \
+            -scheme cicddemo \
+            -sdk iphoneos \
+            -configuration Debug \
+            -archivePath $PWD/build/cicddemo-debug.xcarchive \
+            DEVELOPMENT_TEAM=$APPLE_TEAM_ID \
+            PRODUCT_BUNDLE_IDENTIFIER=$BUNDLE_ID \
+            -allowProvisioningUpdates | xcpretty
+
+          xcodebuild -exportArchive \
+            -archivePath $PWD/build/cicddemo-debug.xcarchive \
+            -exportOptionsPlist exportOptions.plist \
+            -exportPath $PWD/build/ipa-debug \
+            -allowProvisioningUpdates | xcpretty
+
+      - name: Upload Debug IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa-debug
+          path: ios/build/ipa-debug/*.ipa
+
+      - name: Build Release IPA
+        run: |
+          cd ios
+          set -o pipefail
+          xcodebuild clean \
+            -workspace cicddemo.xcworkspace \
+            -scheme cicddemo \
+            -configuration Release | xcpretty
+
           xcodebuild archive \
             -workspace cicddemo.xcworkspace \
             -scheme cicddemo \
             -sdk iphoneos \
             -configuration Release \
-            -archivePath $PWD/build/cicddemo.xcarchive \
-            -allowProvisioningUpdates
+            -archivePath $PWD/build/cicddemo-release.xcarchive \
+            DEVELOPMENT_TEAM=$APPLE_TEAM_ID \
+            PRODUCT_BUNDLE_IDENTIFIER=$BUNDLE_ID \
+            -allowProvisioningUpdates | xcpretty
 
           xcodebuild -exportArchive \
-            -archivePath $PWD/build/cicddemo.xcarchive \
+            -archivePath $PWD/build/cicddemo-release.xcarchive \
             -exportOptionsPlist exportOptions.plist \
-            -exportPath $PWD/build/ipa \
-            -allowProvisioningUpdates
+            -exportPath $PWD/build/ipa-release \
+            -allowProvisioningUpdates | xcpretty
 
-      - name: Upload IPA Artifact
+      - name: Upload Release IPA
         uses: actions/upload-artifact@v4
         with:
-          name: ios-ipa
-          path: ios/build/ipa/*.ipa
+          name: ios-ipa-release
+          path: ios/build/ipa-release/*.ipa
+
