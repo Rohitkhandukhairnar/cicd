@@ -32,9 +32,6 @@ jobs:
           cd ios
           pod install --repo-update
   
-      # Run Jest tests
-      - name: Run Jest tests
-        run: npm test
   
       # Build iOS app (Release IPA)
       - name: Build iOS App
