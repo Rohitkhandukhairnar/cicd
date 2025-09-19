@@ -56,7 +56,6 @@ jobs:
           xcodebuild archive \
             -workspace cicddemo.xcworkspace \
             -scheme cicddemo \
-            -configuration Release \
             -sdk iphoneos \
             -destination "generic/platform=iOS" \
             -archivePath $PWD/build/cicddemo-release.xcarchive \
