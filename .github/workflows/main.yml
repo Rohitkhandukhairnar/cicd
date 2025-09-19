@@ -44,30 +44,22 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k github ~/Library/Keychains/actions.keychain
 
       # Release IPA
-      - name: Build Release IPA
+      - name: Build iOS Release IPA
         run: |
           cd ios
-          set -o pipefail
           xcodebuild clean \
             -workspace cicddemo.xcworkspace \
             -scheme cicddemo \
-            -configuration Release | xcpretty
-      
-          xcodebuild archive \
-            -workspace cicddemo.xcworkspace \
-            -scheme cicddemo \
+            -configuration Release \
             -sdk iphoneos \
-            -destination "generic/platform=iOS" \
-            -archivePath $PWD/build/cicddemo-release.xcarchive \
-            DEVELOPMENT_TEAM=$APPLE_TEAM_ID \
-            PRODUCT_BUNDLE_IDENTIFIER=$BUNDLE_ID \
-            -allowProvisioningUpdates | xcpretty
-      
+            -destination 'generic/platform=iOS' \
+            -archivePath build/cicddemo.xcarchive archive
+  
           xcodebuild -exportArchive \
-            -archivePath $PWD/build/cicddemo-release.xcarchive \
+            -archivePath build/cicddemo.xcarchive \
             -exportOptionsPlist exportOptions.plist \
-            -exportPath $PWD/build/ipa-release \
-            -allowProvisioningUpdates | xcpretty
+            -exportPath build/ipa
+
 
 
 
