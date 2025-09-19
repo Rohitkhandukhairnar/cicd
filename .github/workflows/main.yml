@@ -71,16 +71,10 @@ jobs:
 
       - name: Setup Signing
         run: |
-          set -euo pipefail
-
-          echo "📦 Writing provisioning profile..."
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           echo "$IOS_PROVISION_PROFILE_BASE64" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/app.mobileprovision
 
-          echo "📦 Writing certificate..."
           echo "$IOS_CERTIFICATE_BASE64" | base64 --decode > certificate.p12
-
-          echo "🔐 Importing certificate into keychain..."
           security create-keychain -p github actions.keychain
           security import certificate.p12 -k ~/Library/Keychains/actions.keychain -P "$IOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
           security list-keychains -s ~/Library/Keychains/actions.keychain
@@ -88,23 +82,28 @@ jobs:
           security unlock-keychain -p github ~/Library/Keychains/actions.keychain
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k github ~/Library/Keychains/actions.keychain
 
-       # Build and archive
       - name: Build IPA
         run: |
           cd ios
-          set -o pipefail
-          xcodebuild -workspace cicddemo.xcworkspace \
-                     -scheme cicddemo \
-                     -sdk iphoneos \
-                     -configuration Release \
-                     -archivePath build/cicddemo.xcarchive \
-                     clean archive | xcpretty
-  
+          xcodebuild clean \
+            -workspace cicddemo.xcworkspace \
+            -scheme cicddemo \
+            -configuration Release
+          
+          xcodebuild archive \
+            -workspace cicddemo.xcworkspace \
+            -scheme cicddemo \
+            -sdk iphoneos \
+            -configuration Release \
+            -archivePath $PWD/build/cicddemo.xcarchive \
+            -allowProvisioningUpdates
+
           xcodebuild -exportArchive \
-                     -archivePath build/cicddemo.xcarchive \
-                     -exportOptionsPlist exportOptions.plist \
-                     -exportPath build/ipa | xcpretty
-                     
+            -archivePath $PWD/build/cicddemo.xcarchive \
+            -exportOptionsPlist exportOptions.plist \
+            -exportPath $PWD/build/ipa \
+            -allowProvisioningUpdates
+
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
