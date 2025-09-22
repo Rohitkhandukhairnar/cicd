@@ -47,6 +47,15 @@ jobs:
           cd ios
           pod install --repo-update
 
+      # Check Xcode project settings first
+      - name: Check Xcode Project Settings
+        run: |
+          cd ios
+          echo "Checking current bundle identifier..."
+          xcodebuild -workspace cicddemo.xcworkspace -scheme cicddemo -showBuildSettings | grep PRODUCT_BUNDLE_IDENTIFIER || true
+          echo "Checking current provisioning profile..."
+          xcodebuild -workspace cicddemo.xcworkspace -scheme cicddemo -showBuildSettings | grep PROVISIONING_PROFILE_SPECIFIER || true
+
       # Setup code signing
       - name: Setup Code Signing
         env:
@@ -113,7 +122,7 @@ jobs:
           </plist>
           EOF
 
-      # Build iOS app - SIMPLE VERSION WITHOUT XCPRETTY
+      # Build iOS app - FIXED with proper bundle identifier
       - name: Build iOS App
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -124,7 +133,8 @@ jobs:
           echo "🏗️  Cleaning build directory..."
           xcodebuild clean -workspace cicddemo.xcworkspace -scheme cicddemo -configuration Release
           
-          echo "🚀 Building archive (this may take several minutes)..."
+          echo "🚀 Building archive..."
+          # First try to build with explicit bundle identifier
           xcodebuild archive \
             -workspace cicddemo.xcworkspace \
             -scheme cicddemo \
@@ -134,7 +144,9 @@ jobs:
             CODE_SIGN_STYLE="Manual" \
             PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-            PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID"
+            PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
+            CURRENT_PROJECT_VERSION=1 \
+            MARKETING_VERSION=1.0
           
           echo "✅ Archive created successfully"
 
