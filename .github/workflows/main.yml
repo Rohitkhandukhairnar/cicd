@@ -14,62 +14,85 @@ jobs:
       IOS_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}
       IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
       IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      BUNDLE_ID: ${{ secrets.BUNDLE_ID }}
 
     steps:
+      # Checkout code
       - name: Checkout repository
         uses: actions/checkout@v4
-
+  
+      # Set up Node.js
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-
+  
+      # Install dependencies
       - name: Install dependencies
         run: npm install
-
+  
+      # Install CocoaPods
       - name: Install Pods
         run: |
           cd ios
           pod install --repo-update
-
-      # 🔑 Install provisioning profile & certificate
+          
       - name: Setup Signing
         run: |
+          set -euo pipefail
+          echo "📦 Writing mobileprovision..."
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           echo "$IOS_PROVISION_PROFILE_BASE64" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/app.mobileprovision
+          echo "📦 Writing certificate..."
           echo "$IOS_CERTIFICATE_BASE64" | base64 --decode > certificate.p12
-          
+          echo "🔐 Importing certificate..."
           security create-keychain -p github actions.keychain
           security import certificate.p12 -k ~/Library/Keychains/actions.keychain -P "$IOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
           security list-keychains -s ~/Library/Keychains/actions.keychain
           security default-keychain -s ~/Library/Keychains/actions.keychain
           security unlock-keychain -p github ~/Library/Keychains/actions.keychain
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k github ~/Library/Keychains/actions.keychain
+          
+      - name: Create exportOptions.plist
+        run: |
+          cat <<EOF > ios/exportOptions.plist
+          {
+            "compileBitcode": false,
+            "destination": "export",
+            "method": "app-store",
+            "signingStyle": "manual",
+            "teamID": "${APPLE_TEAM_ID}",
+            "provisioningProfiles": {
+              "${BUNDLE_ID}": "${PROFILE_UUID}"
+            }
+          }
+          EOF
+          cat ios/exportOptions.plist
 
+  
+  
+      # Build iOS app (Release IPA)
       - name: Build iOS App
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
         run: |
           cd ios
-          xcodebuild clean \
-            -workspace cicddemo.xcworkspace \
-            -scheme cicddemo \
-            -configuration Release
-
-          xcodebuild archive \
-            -workspace cicddemo.xcworkspace \
+          xcodebuild -workspace cicddemo.xcworkspace \
             -scheme cicddemo \
             -sdk iphoneos \
             -configuration Release \
-            -archivePath $PWD/build/cicddemo.xcarchive \
-            -allowProvisioningUpdates
-
+            archive -archivePath $PWD/build/cicddemo.xcarchive
+  
           xcodebuild -exportArchive \
             -archivePath $PWD/build/cicddemo.xcarchive \
             -exportOptionsPlist $PWD/exportOptions.plist \
-            -exportPath $PWD/build/ipa \
-            -allowProvisioningUpdates
-
+            -exportPath $PWD/build
+  
+      # Upload IPA artifact
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: ios-ipa
-          path: ios/build/ipa/*.ipa
+          path: ios/build/*.ipa
