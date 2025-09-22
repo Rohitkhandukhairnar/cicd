@@ -31,6 +31,13 @@ jobs:
         run: |
           cd ios
           pod install --repo-update
+          
+      - name: Setup Signing
+        run: |
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "$IOS_PROVISION_PROFILE_BASE64" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/app.mobileprovision
+          ls -lh ~/Library/MobileDevice/Provisioning\ Profiles
+          file ~/Library/MobileDevice/Provisioning\ Profiles/app.mobileprovision
 
       - name: Debug Provisioning Profile
         run: |
