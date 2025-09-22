@@ -32,16 +32,18 @@ jobs:
           cd ios
           pod install --repo-update
           
-      - name: Setup Signing
+      - name: Extract Provisioning Profile Info
         run: |
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          echo "$IOS_PROVISION_PROFILE_BASE64" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/app.mobileprovision
-          ls -lh ~/Library/MobileDevice/Provisioning\ Profiles
-          file ~/Library/MobileDevice/Provisioning\ Profiles/app.mobileprovision
-      - name: Debug Provisioning Profile
-        run: |
-          security cms -D -i ~/Library/MobileDevice/Provisioning\ Profiles/app.mobileprovision | plutil -extract Name xml1 -o - -
-          security cms -D -i ~/Library/MobileDevice/Provisioning\ Profiles/app.mobileprovision | plutil -extract UUID xml1 -o - -
+          PROFILE_PATH=~/Library/MobileDevice/Provisioning\ Profiles/app.mobileprovision
+          echo "🔍 Extracting UUID and Name from provisioning profile..."
+          security cms -D -i "$PROFILE_PATH" > profile.plist
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" profile.plist)
+          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" profile.plist)
+          echo "Provisioning Profile UUID: $PROFILE_UUID"
+          echo "Provisioning Profile Name: $PROFILE_NAME"
+          echo "PROFILE_UUID=$PROFILE_UUID" >> $GITHUB_ENV
+          echo "PROFILE_NAME=$PROFILE_NAME" >> $GITHUB_ENV
+
 
 
 
