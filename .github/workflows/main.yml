@@ -4,10 +4,7 @@ on:
   push:
     branches:
       - main
-      - release/*
   pull_request:
-    branches:
-      - main
 
 jobs:
   ios-build:
@@ -15,10 +12,9 @@ jobs:
     runs-on: macos-latest
     env:
       NODE_VERSION: '20'
-      RUBY_VERSION: '3.2'
 
     steps:
-      # Clean derived data to prevent caching issues
+      # Clean derived data
       - name: Clean Derived Data
         run: |
           rm -rf ~/Library/Developer/Xcode/DerivedData/*
@@ -28,40 +24,28 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Install xcpretty first
-      - name: Install xcpretty
-        run: gem install xcpretty
-
       # Set up Node.js
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: '**/package-lock.json'
 
       # Install npm dependencies
       - name: Install npm dependencies
-        run: npm ci --legacy-peer-deps
-
-      # Set up Ruby
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: ${{ env.RUBY_VERSION }}
-          bundler-cache: true
+        run: npm install
 
       # Install CocoaPods
       - name: Install CocoaPods
         run: |
-          gem install cocoapods
+          sudo gem install cocoapods
           pod --version
 
       # Install CocoaPods dependencies
       - name: Install Pods
         run: |
           cd ios
-          pod install --repo-update --clean-install
+          pod install --repo-update
 
       # Setup code signing
       - name: Setup Code Signing
@@ -70,7 +54,6 @@ jobs:
           IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
           IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          BUNDLE_ID: ${{ secrets.BUNDLE_ID }}
         run: |
           set -euo pipefail
 
@@ -78,7 +61,7 @@ jobs:
           security create-keychain -p "$IOS_CERTIFICATE_PASSWORD" build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p "$IOS_CERTIFICATE_PASSWORD" build.keychain
-          security set-keychain-settings -t 3600 -u build.keychain
+          security set-keychain-settings -t 3600 build.keychain
 
           echo "📦 Importing certificate..."
           echo "$IOS_CERTIFICATE_BASE64" | base64 --decode > certificate.p12
@@ -95,7 +78,6 @@ jobs:
           security cms -D -i ~/Library/MobileDevice/Provisioning\ Profiles/build.mobileprovision > profile.plist
           PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" profile.plist)
           echo "PROFILE_UUID=$PROFILE_UUID" >> $GITHUB_ENV
-          echo "PROVISIONING_PROFILE_SPECIFIER=$PROFILE_UUID" >> $GITHUB_ENV
 
           echo "✅ Code signing setup complete"
 
@@ -122,8 +104,6 @@ jobs:
               <true/>
               <key>teamID</key>
               <string>$APPLE_TEAM_ID</string>
-              <key>thinning</key>
-              <string>&lt;none&gt;</string>
               <key>provisioningProfiles</key>
               <dict>
                   <key>$BUNDLE_ID</key>
@@ -133,23 +113,18 @@ jobs:
           </plist>
           EOF
 
-          echo "📄 exportOptions.plist content:"
-          cat ios/exportOptions.plist
-
-      # Build iOS app
-      - name: Build iOS Archive
+      # Build iOS app - SIMPLE VERSION WITHOUT XCPRETTY
+      - name: Build iOS App
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           BUNDLE_ID: ${{ secrets.BUNDLE_ID }}
         run: |
           cd ios
-
+          
           echo "🏗️  Cleaning build directory..."
-          xcodebuild clean -workspace cicddemo.xcworkspace \
-            -scheme cicddemo \
-            -configuration Release
-
-          echo "🚀 Building archive..."
+          xcodebuild clean -workspace cicddemo.xcworkspace -scheme cicddemo -configuration Release
+          
+          echo "🚀 Building archive (this may take several minutes)..."
           xcodebuild archive \
             -workspace cicddemo.xcworkspace \
             -scheme cicddemo \
@@ -158,34 +133,37 @@ jobs:
             -archivePath build/cicddemo.xcarchive \
             CODE_SIGN_STYLE="Manual" \
             PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
-            PROVISIONING_PROFILE="$PROFILE_UUID" \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-            PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
-            | xcpretty
-
+            PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID"
+          
           echo "✅ Archive created successfully"
 
-      # Export IPA from archive
+      # Export IPA
       - name: Export IPA
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
         run: |
           cd ios
-
+          
           echo "📦 Exporting IPA..."
           xcodebuild -exportArchive \
             -archivePath build/cicddemo.xcarchive \
             -exportOptionsPlist exportOptions.plist \
             -exportPath build \
-            -allowProvisioningUpdates \
-            | xcpretty
-
+            -allowProvisioningUpdates
+          
           echo "✅ IPA exported successfully"
-
-          # List generated files
-          echo "📁 Generated files:"
-          ls -la build/
+          
+          # Check if IPA was created
+          if ls build/*.ipa 1> /dev/null 2>&1; then
+            echo "🎉 IPA file found:"
+            ls -la build/*.ipa
+          else
+            echo "❌ No IPA file found in build directory:"
+            ls -la build/
+            exit 1
+          fi
 
       # Upload IPA artifact
       - name: Upload IPA Artifact
@@ -195,24 +173,14 @@ jobs:
           path: ios/build/*.ipa
           retention-days: 7
 
-      # Cleanup keychain
-      - name: Cleanup Keychain
+      # Cleanup
+      - name: Cleanup
         if: always()
         run: |
           security delete-keychain build.keychain || true
-          rm -f certificate.p12
-          rm -f profile.plist
+          rm -f certificate.p12 profile.plist || true
 
-      # Notify success
-      - name: Notify Success
+      # Success message
+      - name: Success Notification
         if: success()
-        run: |
-          echo "🎉 iOS build completed successfully!"
-          echo "IPA artifact has been uploaded"
-
-      # Notify failure
-      - name: Notify Failure
-        if: failure()
-        run: |
-          echo "❌ iOS build failed!"
-          exit 1
+        run: echo "🎉 iOS IPA build completed successfully!"
