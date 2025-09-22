@@ -32,17 +32,24 @@ jobs:
           cd ios
           pod install --repo-update
           
-      - name: Extract Provisioning Profile Info
+      - name: Setup Signing
         run: |
-          PROFILE_PATH=~/Library/MobileDevice/Provisioning\ Profiles/app.mobileprovision
-          echo "🔍 Extracting UUID and Name from provisioning profile..."
-          security cms -D -i "$PROFILE_PATH" > profile.plist
-          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" profile.plist)
-          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" profile.plist)
-          echo "Provisioning Profile UUID: $PROFILE_UUID"
-          echo "Provisioning Profile Name: $PROFILE_NAME"
-          echo "PROFILE_UUID=$PROFILE_UUID" >> $GITHUB_ENV
-          echo "PROFILE_NAME=$PROFILE_NAME" >> $GITHUB_ENV
+          set -euo pipefail
+
+          echo "📦 Writing mobileprovision..."
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "$IOS_PROVISION_PROFILE_BASE64" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/app.mobileprovision
+
+          echo "📦 Writing certificate..."
+          echo "$IOS_CERTIFICATE_BASE64" | base64 --decode > certificate.p12
+
+          echo "🔐 Importing certificate..."
+          security create-keychain -p github actions.keychain
+          security import certificate.p12 -k ~/Library/Keychains/actions.keychain -P "$IOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security list-keychains -s ~/Library/Keychains/actions.keychain
+          security default-keychain -s ~/Library/Keychains/actions.keychain
+          security unlock-keychain -p github ~/Library/Keychains/actions.keychain
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k github ~/Library/Keychains/actions.keychain
 
 
 
