@@ -28,6 +28,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Install xcpretty first
+      - name: Install xcpretty
+        run: gem install xcpretty
+
       # Set up Node.js
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -38,7 +42,7 @@ jobs:
 
       # Install npm dependencies
       - name: Install npm dependencies
-        run: npm install
+        run: npm ci --legacy-peer-deps
 
       # Set up Ruby
       - name: Set up Ruby
@@ -157,7 +161,7 @@ jobs:
             PROVISIONING_PROFILE="$PROFILE_UUID" \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
-            | xcpretty --color
+            | xcpretty
 
           echo "✅ Archive created successfully"
 
@@ -175,7 +179,7 @@ jobs:
             -exportOptionsPlist exportOptions.plist \
             -exportPath build \
             -allowProvisioningUpdates \
-            | xcpretty --color
+            | xcpretty
 
           echo "✅ IPA exported successfully"
 
@@ -189,17 +193,6 @@ jobs:
         with:
           name: ios-app-release
           path: ios/build/*.ipa
-          retention-days: 7
-
-      # Upload build logs
-      - name: Upload Build Logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-logs
-          path: |
-            ios/xcodebuild.log
-            ios/pod-install.log
           retention-days: 7
 
       # Cleanup keychain
