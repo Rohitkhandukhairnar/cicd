@@ -83,6 +83,7 @@ jobs:
             -scheme cicddemo \
             -sdk iphoneos \
             -configuration Release \
+            -destination 'generic/platform=iOS' \
             archive -archivePath $PWD/build/cicddemo.xcarchive
   
           xcodebuild -exportArchive \
