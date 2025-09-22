@@ -18,9 +18,13 @@ jobs:
       BUNDLE_ID: ${{ secrets.BUNDLE_ID }}
 
     steps:
+      - name: Clean Derived Data
+        run: rm -rf ~/Library/Developer/Xcode/DerivedData/*
+
       # Checkout code
       - name: Checkout repository
         uses: actions/checkout@v4
+        
   
       # Set up Node.js
       - name: Set up Node.js
