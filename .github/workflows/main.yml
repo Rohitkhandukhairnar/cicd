@@ -38,11 +38,12 @@ jobs:
           echo "$IOS_PROVISION_PROFILE_BASE64" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/app.mobileprovision
           ls -lh ~/Library/MobileDevice/Provisioning\ Profiles
           file ~/Library/MobileDevice/Provisioning\ Profiles/app.mobileprovision
-
       - name: Debug Provisioning Profile
         run: |
           security cms -D -i ~/Library/MobileDevice/Provisioning\ Profiles/app.mobileprovision | plutil -extract Name xml1 -o - -
           security cms -D -i ~/Library/MobileDevice/Provisioning\ Profiles/app.mobileprovision | plutil -extract UUID xml1 -o - -
+
+
 
   
   
