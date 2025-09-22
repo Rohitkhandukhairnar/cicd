@@ -31,6 +31,12 @@ jobs:
         run: |
           cd ios
           pod install --repo-update
+
+      - name: Debug Provisioning Profile
+        run: |
+          security cms -D -i ~/Library/MobileDevice/Provisioning\ Profiles/app.mobileprovision | plutil -extract Name xml1 -o - -
+          security cms -D -i ~/Library/MobileDevice/Provisioning\ Profiles/app.mobileprovision | plutil -extract UUID xml1 -o - -
+
   
   
       # Build iOS app (Release IPA)
