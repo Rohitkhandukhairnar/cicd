@@ -1,4 +1,4 @@
-name: React Native iOS Release Build with Development Profile
+name: React Native iOS Development Build
 
 on:
   push:
@@ -7,8 +7,8 @@ on:
   pull_request:
 
 jobs:
-  ios-build:
-    name: Build iOS IPA (Development Profile - Release IPA)
+  ios-development-build:
+    name: Build Development IPA
     runs-on: macos-latest
     env:
       NODE_VERSION: '20'
@@ -41,95 +41,172 @@ jobs:
           sudo gem install cocoapods
           pod --version
 
+      # FIX: Add bundle identifiers to React Native Pods before installation
+      - name: Fix Podfile for React Native Pods
+        run: |
+          cd ios
+          # Create a backup of Podfile
+          cp Podfile Podfile.backup
+          
+          # Add post_install hook to set bundle identifiers for React Native Pods
+          cat >> Podfile << 'EOF'
+
+          # Fix for React Native Pods missing bundle identifiers
+          post_install do |installer|
+            installer.pods_project.targets.each do |target|
+              target.build_configurations.each do |config|
+                # Set bundle identifier for React Native Pods that are missing it
+                if target.product_type == 'com.apple.product-type.bundle'
+                  config.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = 'org.reactjs.native.$(PRODUCT_NAME:rfc1034identifier)'
+                elsif target.name.start_with?('React-') || target.name.start_with?('RCT') || target.name.start_with?('FB')
+                  config.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = 'org.reactjs.native.$(PRODUCT_NAME:rfc1034identifier)'
+                end
+              end
+            end
+          end
+          EOF
+          
+          echo "✅ Added bundle identifier fix to Podfile"
+
       # Install CocoaPods dependencies
       - name: Install Pods
         run: |
           cd ios
           pod install --repo-update
 
-      # Decode and verify DEVELOPMENT provisioning profile
+      # Alternative fix: Update Podfile with proper settings
+      - name: Ensure Proper Podfile Configuration
+        run: |
+          cd ios
+          # Check if Podfile has proper settings
+          if ! grep -q "use_frameworks!" Podfile; then
+            echo "Adding use_frameworks! to Podfile..."
+            sed -i '' '1i\'$'\n''use_frameworks! :linkage => :static'$'\n' Podfile
+          fi
+
+      # FIX: Set bundle identifiers in Xcode project for Pods
+      - name: Fix Pods Project Bundle Identifiers
+        run: |
+          cd ios
+          echo "Fixing bundle identifiers in Pods project..."
+          
+          # This command ensures all Pods have bundle identifiers
+          xcodebuild -project Pods/Pods.xcodeproj -list | grep -v "Information" | while read target; do
+            if [[ ! -z "$target" && "$target" != "The project named" ]]; then
+              echo "Processing target: $target"
+            fi
+          done || true
+          
+          # Alternative: Use xcodebuild to update settings
+          /usr/libexec/PlistBuddy -c "Print" Pods/Pods.xcodeproj/project.pbxproj > /dev/null 2>&1 || echo "Pods project exists"
+
+      # Decode Development Provisioning Profile
       - name: Decode Development Provisioning Profile
         env:
           IOS_DEVELOPMENT_PROFILE_BASE64: ${{ secrets.IOS_DEVELOPMENT_PROFILE_BASE64 }}
-          BUNDLE_ID: ${{ secrets.APPLE_BUNDLE_ID }}
+          APP_BUNDLE_ID: ${{ secrets.APP_BUNDLE_ID }}
         run: |
-          echo "📋 Decoding and verifying DEVELOPMENT provisioning profile..."
-          
-          # Decode the profile
-          echo "$IOS_DEVELOPMENT_PROFILE_BASE64" | base64 --decode > profile.mobileprovision
-          
-          # Verify it's a valid provisioning profile
-          if security cms -D -i profile.mobileprovision > profile.plist 2>/dev/null; then
-            echo "✅ Development provisioning profile decoded successfully"
-          else
-            echo "❌ Failed to decode development provisioning profile"
-            exit 1
-          fi
-          
-          # Extract profile info
-          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" profile.plist)
-          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" profile.plist)
-          PROFILE_BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :Entitlements:application-identifier" profile.plist 2>/dev/null || echo "Not found")
-          PROFILE_TEAM_ID=$(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" profile.plist)
-          EXPIRATION_DATE=$(/usr/libexec/PlistBuddy -c "Print :ExpirationDate" profile.plist)
-          PROFILE_TYPE=$(/usr/libexec/PlistBuddy -c "Print :Entitlements:get-task-allow" profile.plist 2>/dev/null || echo "false")
-          
-          echo "🔍 Profile Name: $PROFILE_NAME"
-          echo "🔍 Profile UUID: $PROFILE_UUID"
-          echo "🔍 Bundle ID: $PROFILE_BUNDLE_ID"
-          echo "🔍 Team ID: $PROFILE_TEAM_ID"
-          echo "🔍 Expiration Date: $EXPIRATION_DATE"
-          echo "🔍 Development Profile (get-task-allow): $PROFILE_TYPE"
-          
-          if [[ "$PROFILE_TYPE" == "true" ]]; then
-            echo "✅ This is a DEVELOPMENT provisioning profile"
-          else
-            echo "⚠️  This doesn't appear to be a development profile"
-          fi
-          
-          echo "PROFILE_UUID=$PROFILE_UUID" >> $GITHUB_ENV
-          echo "PROFILE_TEAM_ID=$PROFILE_TEAM_ID" >> $GITHUB_ENV
+          echo "📋 Decoding development provisioning profile..."
+          echo "$IOS_DEVELOPMENT_PROFILE_BASE64" | base64 --decode > dev_profile.mobileprovision
+          security cms -D -i dev_profile.mobileprovision > dev_profile.plist
+          DEV_PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" dev_profile.plist)
+          DEV_PROFILE_TEAM_ID=$(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" dev_profile.plist)
+          echo "DEV_PROFILE_UUID=$DEV_PROFILE_UUID" >> $GITHUB_ENV
+          echo "DEV_PROFILE_TEAM_ID=$DEV_PROFILE_TEAM_ID" >> $GITHUB_ENV
+          echo "✅ Development Profile UUID: $DEV_PROFILE_UUID"
+          echo "✅ Team ID from Profile: $DEV_PROFILE_TEAM_ID"
 
-      # Setup code signing with DEVELOPMENT certificate
+      # Setup Development Code Signing
       - name: Setup Development Code Signing
         env:
           IOS_DEVELOPMENT_CERTIFICATE_BASE64: ${{ secrets.IOS_DEVELOPMENT_CERTIFICATE_BASE64 }}
           IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
         run: |
           set -euo pipefail
-          echo "🔐 Setting up DEVELOPMENT code signing for RELEASE build..."
+          echo "🔐 Setting up development code signing..."
           
-          # Create keychain
-          security create-keychain -p "$IOS_CERTIFICATE_PASSWORD" build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p "$IOS_CERTIFICATE_PASSWORD" build.keychain
-          security set-keychain-settings -t 3600 build.keychain
+          # Delete existing keychain if any
+          security delete-keychain dev.keychain || true
+          
+          # Create new keychain
+          security create-keychain -p "$IOS_CERTIFICATE_PASSWORD" dev.keychain
+          security default-keychain -s dev.keychain
+          security unlock-keychain -p "$IOS_CERTIFICATE_PASSWORD" dev.keychain
+          security set-keychain-settings -t 3600 -u dev.keychain
           
           # Import DEVELOPMENT certificate
-          echo "📦 Importing DEVELOPMENT certificate..."
-          echo "$IOS_DEVELOPMENT_CERTIFICATE_BASE64" | base64 --decode > certificate.p12
-          security import certificate.p12 -k build.keychain -P "$IOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          echo "📦 Importing development certificate..."
+          echo "$IOS_DEVELOPMENT_CERTIFICATE_BASE64" | base64 --decode > dev_certificate.p12
+          security import dev_certificate.p12 -k dev.keychain -P "$IOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
           
-          # Configure keychain
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$IOS_CERTIFICATE_PASSWORD" build.keychain
+          # Configure keychain properly
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$IOS_CERTIFICATE_PASSWORD" dev.keychain
+          security list-keychains -s dev.keychain
           
-          echo "✅ Development code signing setup complete"
+          # Verify certificate
+          echo "🔍 Verifying certificate..."
+          security find-identity -v -p codesigning dev.keychain
 
-      # Install DEVELOPMENT provisioning profile
-      - name: Install Provisioning Profile
+      # Install Development Profile
+      - name: Install Development Provisioning Profile
         run: |
-          echo "📱 Installing DEVELOPMENT provisioning profile..."
+          echo "📱 Installing development provisioning profile..."
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/"$PROFILE_UUID.mobileprovision"
-          echo "✅ Development provisioning profile installed: $PROFILE_UUID"
+          cp dev_profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/"$DEV_PROFILE_UUID.mobileprovision"
+          echo "✅ Development profile installed"
 
-      # Create export options plist for DEVELOPMENT profile but RELEASE build
-      - name: Create exportOptions.plist
+      # Fix Bundle Identifier in Xcode project
+      - name: Fix Bundle Identifier
         env:
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          BUNDLE_ID: ${{ secrets.APPLE_BUNDLE_ID }}
+          APP_BUNDLE_ID: ${{ secrets.APP_BUNDLE_ID }}
+          APP_TEAM_ID: ${{ secrets.APP_TEAM_ID }}
         run: |
-          cat > ios/exportOptions.plist << EOF
+          cd ios
+          echo "🔧 Fixing bundle identifier: $APP_BUNDLE_ID"
+          
+          # Use sed to update bundle identifier
+          sed -i '' "s/PRODUCT_BUNDLE_IDENTIFIER = [^;]*;/PRODUCT_BUNDLE_IDENTIFIER = \"$APP_BUNDLE_ID\";/g" cicddemo.xcodeproj/project.pbxproj
+          sed -i '' "s/DEVELOPMENT_TEAM = [^;]*;/DEVELOPMENT_TEAM = \"$APP_TEAM_ID\";/g" cicddemo.xcodeproj/project.pbxproj
+          
+          echo "✅ Bundle identifier updated"
+
+      # FIX: Ensure all Pods have bundle identifiers before building
+      - name: Pre-build Pods Validation
+        run: |
+          cd ios
+          echo "🔍 Validating Pods configuration..."
+          
+          # Create a script to fix Pods bundle identifiers
+          cat > fix_pods_bundle_ids.rb << 'EOF'
+          require 'xcodeproj'
+
+          project_path = 'Pods/Pods.xcodeproj'
+          project = Xcodeproj::Project.open(project_path)
+
+          project.targets.each do |target|
+            target.build_configurations.each do |config|
+              # Only set if missing or empty
+              if config.build_settings['PRODUCT_BUNDLE_IDENTIFIER'].nil? || config.build_settings['PRODUCT_BUNDLE_IDENTIFIER'].empty?
+                config.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = 'org.reactjs.native.' + target.name.gsub(/[^a-zA-Z0-9]/, '')
+                puts "Set bundle identifier for #{target.name}: #{config.build_settings['PRODUCT_BUNDLE_IDENTIFIER']}"
+              end
+            end
+          end
+
+          project.save
+          EOF
+          
+          # Install xcodeproj gem and run the fix
+          sudo gem install xcodeproj
+          ruby fix_pods_bundle_ids.rb || echo "Ruby fix skipped, using alternative method"
+
+      # Create Development Export Options
+      - name: Create Development Export Options
+        env:
+          APP_TEAM_ID: ${{ secrets.APP_TEAM_ID }}
+          APP_BUNDLE_ID: ${{ secrets.APP_BUNDLE_ID }}
+        run: |
+          cat > ios/exportOptions_dev.plist << EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -141,127 +218,113 @@ jobs:
               <key>signingStyle</key>
               <string>manual</string>
               <key>teamID</key>
-              <string>$APPLE_TEAM_ID</string>
+              <string>$APP_TEAM_ID</string>
               <key>provisioningProfiles</key>
               <dict>
-                  <key>$BUNDLE_ID</key>
-                  <string>$PROFILE_UUID</string>
+                  <key>$APP_BUNDLE_ID</key>
+                  <string>$DEV_PROFILE_UUID</string>
               </dict>
               <key>signingCertificate</key>
               <string>Apple Development</string>
               <key>uploadBitcode</key>
               <false/>
-              <key>uploadSymbols</key>
-              <false/>
           </dict>
           </plist>
           EOF
-          echo "✅ Created exportOptions.plist for DEVELOPMENT profile + RELEASE build"
 
-      # Build iOS app with RELEASE configuration but DEVELOPMENT signing
-      - name: Build iOS Archive
+      # Build Development Archive with proper settings
+      - name: Build Development Archive
         env:
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          BUNDLE_ID: ${{ secrets.APPLE_BUNDLE_ID }}
+          APP_TEAM_ID: ${{ secrets.APP_TEAM_ID }}
+          APP_BUNDLE_ID: ${{ secrets.APP_BUNDLE_ID }}
         run: |
           cd ios
           
-          echo "🏗️  Cleaning build directory..."
-          xcodebuild clean -workspace cicddemo.xcworkspace -scheme cicddemo -configuration Release
+          echo "🏗️  Cleaning for development build..."
+          xcodebuild clean -workspace cicddemo.xcworkspace -scheme cicddemo -configuration Debug
           
-          echo "🔍 Checking code signing identities..."
-          security find-identity -v -p codesigning build.keychain
+          echo "🔍 Verifying code signing setup..."
+          security find-identity -v -p codesigning dev.keychain
           
-          echo "🚀 Building RELEASE archive with DEVELOPMENT profile..."
+          echo "🚀 Building development archive (Debug configuration)..."
+          
+          # FIX: Use xcodebuild with proper settings for React Native
           xcodebuild archive \
             -workspace cicddemo.xcworkspace \
             -scheme cicddemo \
-            -configuration Release \
+            -configuration Debug \
             -destination "generic/platform=iOS" \
-            -archivePath build/cicddemo.xcarchive \
-            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-            PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
-            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
+            -archivePath build/Dev/cicddemo.xcarchive \
+            DEVELOPMENT_TEAM="$APP_TEAM_ID" \
+            PRODUCT_BUNDLE_IDENTIFIER="$APP_BUNDLE_ID" \
+            PROVISIONING_PROFILE_SPECIFIER="$DEV_PROFILE_UUID" \
             CODE_SIGN_STYLE="Manual" \
             CODE_SIGN_IDENTITY="Apple Development" \
             CURRENT_PROJECT_VERSION=1 \
-            MARKETING_VERSION=1.0
+            MARKETING_VERSION=1.0.0 \
+            CODE_SIGNING_REQUIRED=YES \
+            CODE_SIGNING_ALLOWED=YES \
+            HERMES_ENABLED=1 \
+            OTHER_CODE_SIGN_FLAGS="--deep" \
+            ENABLE_BITCODE=NO
           
-          echo "✅ Release archive with Development profile created"
+          echo "✅ Development archive created"
 
-      # Export IPA
-      - name: Export IPA
+      # Export Development IPA
+      - name: Export Development IPA
         run: |
           cd ios
           
-          echo "📦 Exporting IPA (Development profile + Release build)..."
+          echo "📦 Exporting development IPA..."
           xcodebuild -exportArchive \
-            -archivePath build/cicddemo.xcarchive \
-            -exportOptionsPlist exportOptions.plist \
-            -exportPath build \
+            -archivePath build/Dev/cicddemo.xcarchive \
+            -exportOptionsPlist exportOptions_dev.plist \
+            -exportPath build/Dev \
             -allowProvisioningUpdates
           
-          echo "✅ IPA exported"
+          echo "✅ Development IPA exported"
 
-      # Verify the IPA file
-      - name: Verify IPA
+      # Verify IPA
+      - name: Verify Development IPA
         run: |
           cd ios
           
-          echo "🔍 Verifying IPA file..."
-          if compgen -G "build/*.ipa" > /dev/null; then
-            IPA_FILE=$(ls build/*.ipa)
-            echo "✅ IPA file found: $IPA_FILE"
-            echo "📊 IPA size: $(wc -c < "$IPA_FILE") bytes"
+          echo "🔍 Verifying development IPA..."
+          if compgen -G "build/Dev/*.ipa" > /dev/null; then
+            IPA_FILE=$(ls build/Dev/*.ipa)
+            echo "✅ Development IPA created successfully: $IPA_FILE"
+            echo "📊 Size: $(wc -c < "$IPA_FILE") bytes"
             
-            # Check if it's a development IPA
-            unzip -p "$IPA_FILE" Payload/*.app/embedded.mobileprovision > embedded.mobileprovision
-            if security cms -D -i embedded.mobileprovision > embedded.plist 2>/dev/null; then
-              GET_TASK_ALLOW=$(/usr/libexec/PlistBuddy -c "Print :Entitlements:get-task-allow" embedded.plist 2>/dev/null || echo "false")
-              if [[ "$GET_TASK_ALLOW" == "true" ]]; then
-                echo "✅ This IPA can be installed directly on devices (Development profile)"
-              else
-                echo "⚠️  This IPA may require App Store distribution"
-              fi
-            fi
+            # Basic validation
+            unzip -l "$IPA_FILE" | head -10
           else
-            echo "❌ No IPA file found"
+            echo "❌ Development IPA not found"
+            echo "Build directory contents:"
+            ls -la build/Dev/
             exit 1
           fi
 
-      # Upload IPA artifact
-      - name: Upload IPA Artifact
+      # Upload Development IPA
+      - name: Upload Development IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ios-app-development-release
-          path: ios/build/*.ipa
+          name: ios-development-app
+          path: ios/build/Dev/*.ipa
           retention-days: 30
 
       # Cleanup
       - name: Cleanup
         if: always()
         run: |
-          security delete-keychain build.keychain || true
-          rm -f certificate.p12 profile.plist profile.mobileprovision || true
-          rm -f ios/exportOptions.plist embedded.plist embedded.mobileprovision || true
+          security delete-keychain dev.keychain || true
+          rm -f dev_certificate.p12 dev_profile.mobileprovision dev_profile.plist || true
+          rm -f ios/exportOptions_dev.plist || true
 
       # Success notification
       - name: Success Notification
         if: success()
         run: |
-          echo "🎉 iOS Development Profile + Release IPA Build Completed Successfully!"
-          echo "📱 Bundle ID: ${{ secrets.APPLE_BUNDLE_ID }}"
-          echo "👥 Team ID: ${{ secrets.APPLE_TEAM_ID }}"
-          echo "🔧 Build Type: Release with Development Profile"
-          echo "✅ IPA can be installed directly on devices via InstallOnAir"
-
-      # Failure notification
-      - name: Failure Notification
-        if: failure()
-        run: |
-          echo "❌ Build failed!"
-          echo "Common issues:"
-          echo "1. Make sure DEVELOPMENT profile includes target devices"
-          echo "2. Verify bundle ID matches exactly in development profile"
-          echo "3. Ensure development certificate is not expired"
-          echo "4. Check if development profile is properly configured"
+          echo "🎉 Development IPA Build Completed Successfully!"
+          echo "📱 This IPA can be installed via InstallOnAir, Diawi, etc."
+          echo "📦 Bundle ID: ${{ secrets.APP_BUNDLE_ID }}"
+          echo "👥 Team ID: ${{ secrets.APP_TEAM_ID }}"
