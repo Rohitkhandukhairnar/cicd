@@ -7,11 +7,51 @@ on:
   pull_request:
 
 jobs:
+  android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install Dependencies
+        run: |
+          npm install
+          cd android && ./gradlew clean
+
+      - name: Build Debug APK
+        run: |
+          cd android
+          ./gradlew assembleDebug
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          
+      - name: Build Release APK
+        run: |
+          cd android
+          ./gradlew assembleRelease
+
+      - name: Upload Release APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk-release
+          path: android/app/build/outputs/apk/release/app-release.apk
+          
   ios-adhoc-build:
     name: Build iOS IPA (Ad Hoc)
     runs-on: macos-latest
     env:
-      NODE_VERSION: '20'
+      NODE_VERSION: '18'
 
     steps:
       # Clean derived data
