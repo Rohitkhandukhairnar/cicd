@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<!-- <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -18,6 +18,33 @@
   <key>uploadBitcode</key>
   <false/>
   <key>uploadSymbols</key>
+  <true/>
+</dict>
+</plist> -->
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>method</key>
+  <string>development</string>
+  <key>teamID</key>
+  <string>BV839K2W7C</string>
+  <key>signingStyle</key>
+  <string>manual</string>
+  <key>provisioningProfiles</key>
+  <dict>
+    <key>com.dojowell</key>
+    <string>dojowell_dev</string>
+  </dict>
+  <key>compileBitcode</key>
+  <false/>
+  <key>uploadBitcode</key>
+  <false/>
+  <key>uploadSymbols</key>
+  <false/>
+  <key>iCloudContainerEnvironment</key>
+  <string>Development</string>
+  <key>stripSwiftSymbols</key>
   <true/>
 </dict>
 </plist>
