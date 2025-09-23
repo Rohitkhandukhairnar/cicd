@@ -11,7 +11,7 @@ jobs:
     name: Build iOS IPA
     runs-on: macos-latest
     env:
-      NODE_VERSION: '20'
+      NODE_VERSION: '18'
 
     steps:
       # Clean derived data
@@ -47,25 +47,44 @@ jobs:
           cd ios
           pod install --repo-update
 
-      # Fix Bundle Identifier in Xcode Project
-      - name: Fix Bundle Identifier in Xcode Project
+      # Verify the provisioning profile
+      - name: Verify Provisioning Profile
         env:
+          IOS_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}
           BUNDLE_ID: ${{ secrets.APPLE_BUNDLE_ID }}
         run: |
-          cd ios
-          echo "🔧 Setting bundle identifier: $BUNDLE_ID"
+          echo "📋 Verifying provisioning profile..."
+          echo "$IOS_PROVISION_PROFILE_BASE64" | base64 --decode > profile.mobileprovision
           
-          # Use PlistBuddy to properly set the bundle identifier
-          /usr/libexec/PlistBuddy -c "Set :objects:$(grep -A5 'buildSettings' cicddemo.xcodeproj/project.pbxproj | grep -m1 'isa = PBXNativeTarget' -B10 | grep -o '[A-F0-9]*' | head -1):buildSettings:PRODUCT_BUNDLE_IDENTIFIER $BUNDLE_ID" cicddemo.xcodeproj/project.pbxproj 2>/dev/null || \
-          echo "Using alternative method to set bundle identifier..."
+          # Check profile contents
+          security cms -D -i profile.mobileprovision > profile.plist
           
-          # Alternative method using sed
-          sed -i '' "s/PRODUCT_BUNDLE_IDENTIFIER = [^;]*;/PRODUCT_BUNDLE_IDENTIFIER = \"$BUNDLE_ID\";/g" cicddemo.xcodeproj/project.pbxproj || \
-          sed -i '' "/buildSettings = {/,/};/s/PRODUCT_BUNDLE_IDENTIFIER = [^;]*;/PRODUCT_BUNDLE_IDENTIFIER = \"$BUNDLE_ID\";/g" cicddemo.xcodeproj/project.pbxproj
+          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" profile.plist)
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" profile.plist)
+          PROFILE_BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :Entitlements:application-identifier" profile.plist)
+          PROFILE_TEAM_ID=$(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" profile.plist)
+          EXPIRATION_DATE=$(/usr/libexec/PlistBuddy -c "Print :ExpirationDate" profile.plist)
+          PROVISIONED_DEVICES=$(/usr/libexec/PlistBuddy -c "Print :ProvisionedDevices" profile.plist 2>/dev/null || echo "No devices (App Store profile)")
           
-          echo "✅ Bundle identifier set"
+          echo "🔍 Profile Name: $PROFILE_NAME"
+          echo "🔍 Profile UUID: $PROFILE_UUID"
+          echo "🔍 Bundle ID in Profile: $PROFILE_BUNDLE_ID"
+          echo "🔍 Team ID: $PROFILE_TEAM_ID"
+          echo "🔍 Expiration Date: $EXPIRATION_DATE"
+          echo "🔍 Provisioned Devices: $PROVISIONED_DEVICES"
+          
+          # Verify bundle ID matches
+          if [[ "$PROFILE_BUNDLE_ID" == *"$BUNDLE_ID"* ]]; then
+            echo "✅ Bundle ID matches provisioning profile"
+          else
+            echo "❌ Bundle ID mismatch! Profile expects: $PROFILE_BUNDLE_ID, but using: $BUNDLE_ID"
+            exit 1
+          fi
+          
+          echo "PROFILE_UUID=$PROFILE_UUID" >> $GITHUB_ENV
+          echo "PROFILE_TEAM_ID=$PROFILE_TEAM_ID" >> $GITHUB_ENV
 
-      # Setup code signing
+      # Setup code signing PROPERLY
       - name: Setup Code Signing
         env:
           IOS_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}
@@ -75,31 +94,57 @@ jobs:
         run: |
           set -euo pipefail
 
-          echo "🔐 Creating build keychain..."
+          echo "🔐 Setting up code signing..."
+          
+          # Create and setup keychain PROPERLY
           security create-keychain -p "$IOS_CERTIFICATE_PASSWORD" build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p "$IOS_CERTIFICATE_PASSWORD" build.keychain
-          security set-keychain-settings -t 3600 build.keychain
+          security set-keychain-settings -t 3600 -u build.keychain
 
+          # Import certificate
           echo "📦 Importing certificate..."
           echo "$IOS_CERTIFICATE_BASE64" | base64 --decode > certificate.p12
           security import certificate.p12 -k build.keychain -P "$IOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
 
-          echo "🔧 Setting key partition list..."
+          # Configure keychain properly
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$IOS_CERTIFICATE_PASSWORD" build.keychain
+          security list-keychains -s build.keychain
 
-          echo "📱 Importing provisioning profile..."
+          # Install provisioning profile
+          echo "📱 Installing provisioning profile..."
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          echo "$IOS_PROVISION_PROFILE_BASE64" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/build.mobileprovision
+          echo "$IOS_PROVISION_PROFILE_BASE64" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/"$PROFILE_UUID.mobileprovision"
 
-          echo "📋 Extracting provisioning profile info..."
-          security cms -D -i ~/Library/MobileDevice/Provisioning\ Profiles/build.mobileprovision > profile.plist
-          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" profile.plist)
-          echo "PROFILE_UUID=$PROFILE_UUID" >> $GITHUB_ENV
-          
+          # Verify the certificate
+          echo "🔍 Verifying certificate..."
+          security find-identity -v -p codesigning build.keychain
+
           echo "✅ Code signing setup complete"
 
-      # Create export options plist
+      # Fix Bundle Identifier in Xcode Project
+      - name: Fix Bundle Identifier in Xcode Project
+        env:
+          BUNDLE_ID: ${{ secrets.APPLE_BUNDLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          cd ios
+          echo "🔧 Configuring Xcode project..."
+          
+          # Create xcconfig file for proper build settings
+          cat > build.xcconfig << EOF
+          PRODUCT_BUNDLE_IDENTIFIER = $BUNDLE_ID
+          DEVELOPMENT_TEAM = $APPLE_TEAM_ID
+          CODE_SIGN_STYLE = Manual
+          PROVISIONING_PROFILE_SPECIFIER = $PROFILE_UUID
+          CODE_SIGN_IDENTITY = Apple Distribution
+          CURRENT_PROJECT_VERSION = 1
+          MARKETING_VERSION = 1.0
+          EOF
+          
+          echo "✅ Xcode project configured"
+
+      # Create proper export options plist
       - name: Create exportOptions.plist
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -125,12 +170,18 @@ jobs:
                   <key>$BUNDLE_ID</key>
                   <string>$PROFILE_UUID</string>
               </dict>
+              <key>signingCertificate</key>
+              <string>Apple Distribution</string>
+              <key>uploadBitcode</key>
+              <false/>
+              <key>uploadSymbols</key>
+              <true/>
           </dict>
           </plist>
           EOF
 
-      # Build iOS app - SIMPLIFIED AND ROBUST
-      - name: Build iOS App
+      # Build iOS app with PROPER signing
+      - name: Build iOS Archive
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           BUNDLE_ID: ${{ secrets.APPLE_BUNDLE_ID }}
@@ -140,36 +191,46 @@ jobs:
           echo "🏗️  Cleaning build directory..."
           xcodebuild clean -workspace cicddemo.xcworkspace -scheme cicddemo -configuration Release
           
-          echo "🔍 Verifying project setup..."
-          xcodebuild -workspace cicddemo.xcworkspace -scheme cicddemo -configuration Release -showBuildSettings > build_settings.log
-          grep -E "(PRODUCT_BUNDLE_IDENTIFIER|PROVISIONING_PROFILE|DEVELOPMENT_TEAM)" build_settings.log || true
+          echo "🔍 Verifying code signing setup..."
+          security find-identity -v -p codesigning build.keychain
+          codesign --display --verbose=4 ~/Library/MobileDevice/Provisioning\ Profiles/"$PROFILE_UUID.mobileprovision"
           
-          echo "🚀 Building archive (Swift preview warnings are normal)..."
-          # Build with minimal flags to avoid issues
+          echo "🚀 Building archive with proper code signing..."
           xcodebuild archive \
             -workspace cicddemo.xcworkspace \
             -scheme cicddemo \
             -configuration Release \
             -destination "generic/platform=iOS" \
             -archivePath build/cicddemo.xcarchive \
+            -xcconfig build.xcconfig \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
             PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
             CODE_SIGN_STYLE="Manual" \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
             CURRENT_PROJECT_VERSION=1 \
-            MARKETING_VERSION=1.0
+            MARKETING_VERSION=1.0 \
+            CODE_SIGNING_REQUIRED=YES \
+            CODE_SIGNING_ALLOWED=YES
           
-          # Check if archive was created successfully
-          if [ -d "build/cicddemo.xcarchive" ]; then
-            echo "✅ Archive created successfully!"
+          echo "✅ Archive created"
+
+      # Verify the archive before exporting
+      - name: Verify Archive
+        run: |
+          cd ios
+          
+          echo "🔍 Verifying archive signature..."
+          codesign --verify --verbose=4 build/cicddemo.xcarchive/Products/Applications/cicddemo.app
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ Archive is properly signed"
           else
-            echo "❌ Archive creation failed!"
-            echo "Build settings:"
-            cat build_settings.log
+            echo "❌ Archive signature verification failed"
             exit 1
           fi
 
-      # Export IPA
+      # Export IPA with proper validation
       - name: Export IPA
         run: |
           cd ios
@@ -181,17 +242,29 @@ jobs:
             -exportPath build \
             -allowProvisioningUpdates
           
-          echo "✅ Export completed"
+          echo "✅ IPA exported"
+
+      # Verify the IPA file
+      - name: Verify IPA
+        run: |
+          cd ios
           
-          # Check for IPA
-          if compgen -G "build/*.ipa" > /dev/null; then
-            IPA_FILE=$(ls build/*.ipa)
-            echo "🎉 IPA created: $IPA_FILE"
-            ls -la "$IPA_FILE"
+          echo "🔍 Verifying IPA..."
+          IPA_FILE=$(ls build/*.ipa)
+          
+          # Check IPA structure
+          unzip -l "$IPA_FILE" | head -20
+          
+          # Verify codesignature
+          unzip -q "$IPA_FILE" -d temp_ipa
+          codesign --verify --verbose=4 temp_ipa/Payload/*.app
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ IPA is properly signed and verified"
+            rm -rf temp_ipa
           else
-            echo "❌ IPA not found!"
-            echo "Build directory contents:"
-            ls -la build/
+            echo "❌ IPA verification failed"
+            rm -rf temp_ipa
             exit 1
           fi
 
@@ -203,18 +276,45 @@ jobs:
           path: ios/build/*.ipa
           retention-days: 30
 
+      # Upload provisioning profile for debugging
+      - name: Upload Signing Info
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: signing-info
+          path: |
+            profile.plist
+            ios/build.xcconfig
+          retention-days: 7
+
       # Cleanup
       - name: Cleanup
         if: always()
         run: |
           security delete-keychain build.keychain || true
-          rm -f certificate.p12 profile.plist || true
+          rm -f certificate.p12 profile.plist profile.mobileprovision || true
+          rm -f ios/exportOptions.plist ios/build.xcconfig || true
 
-      # Success notification
+      # Success notification with installation instructions
       - name: Success Notification
         if: success()
         run: |
           echo "🎉 iOS IPA Build Completed Successfully!"
-          echo "📱 Bundle ID: ${{ secrets.APPLE_BUNDLE_ID }}"
-          echo "👥 Team ID: ${{ secrets.APPLE_TEAM_ID }}"
-          echo "✅ IPA is available in the artifacts"
+          echo ""
+          echo "📱 Installation Instructions:"
+          echo "1. Download the 'ios-app-release' artifact"
+          echo "2. Install using one of these methods:"
+          echo "   - Use Apple Configurator 2 on macOS"
+          echo "   - Use a Mobile Device Management (MDM) solution"
+          echo "   - Use TestFlight for internal testing"
+          echo "   - Use App Store Connect for production distribution"
+          echo ""
+          echo "🔐 Important: Direct IPA installation requires:"
+          echo "   - The device UDID must be in the provisioning profile"
+          echo "   - The app must be signed with a distribution certificate"
+          echo "   - For development, use Development certificate instead"
+          echo ""
+          echo "📊 Build Info:"
+          echo "   Bundle ID: ${{ secrets.APPLE_BUNDLE_ID }}"
+          echo "   Team ID: ${{ secrets.APPLE_TEAM_ID }}"
+          echo "   Profile Type: App Store Distribution"
