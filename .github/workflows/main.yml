@@ -47,7 +47,7 @@ jobs:
           cd ios
           pod install --repo-update
 
-      # Decode and verify DEVELOPMENT provisioning profile (using IOS_DEVELOPMENT_PROFILE_BASE64)
+      # Decode and verify DEVELOPMENT provisioning profile
       - name: Decode Development Provisioning Profile
         env:
           IOS_DEVELOPMENT_PROFILE_BASE64: ${{ secrets.IOS_DEVELOPMENT_PROFILE_BASE64 }}
@@ -81,9 +81,8 @@ jobs:
           echo "🔍 Expiration Date: $EXPIRATION_DATE"
           echo "🔍 Development Profile (get-task-allow): $PROFILE_TYPE"
           
-          # Verify it's a development profile
           if [[ "$PROFILE_TYPE" == "true" ]]; then
-            echo "✅ This is a DEVELOPMENT provisioning profile (will be used for Release build)"
+            echo "✅ This is a DEVELOPMENT provisioning profile"
           else
             echo "⚠️  This doesn't appear to be a development profile"
           fi
@@ -91,7 +90,7 @@ jobs:
           echo "PROFILE_UUID=$PROFILE_UUID" >> $GITHUB_ENV
           echo "PROFILE_TEAM_ID=$PROFILE_TEAM_ID" >> $GITHUB_ENV
 
-      # Setup code signing with DEVELOPMENT certificate (using IOS_DEVELOPMENT_CERTIFICATE_BASE64)
+      # Setup code signing with DEVELOPMENT certificate
       - name: Setup Development Code Signing
         env:
           IOS_DEVELOPMENT_CERTIFICATE_BASE64: ${{ secrets.IOS_DEVELOPMENT_CERTIFICATE_BASE64 }}
@@ -138,7 +137,7 @@ jobs:
               <key>compileBitcode</key>
               <false/>
               <key>method</key>
-              <string>development</string>  
+              <string>development</string>
               <key>signingStyle</key>
               <string>manual</string>
               <key>teamID</key>
@@ -149,7 +148,7 @@ jobs:
                   <string>$PROFILE_UUID</string>
               </dict>
               <key>signingCertificate</key>
-              <string>Apple Development</string>  
+              <string>Apple Development</string>
               <key>uploadBitcode</key>
               <false/>
               <key>uploadSymbols</key>
@@ -168,7 +167,7 @@ jobs:
           cd ios
           
           echo "🏗️  Cleaning build directory..."
-          xcodebuild clean -workspace cicddemo.xcworkspace -scheme cicddemo -configuration Release  
+          xcodebuild clean -workspace cicddemo.xcworkspace -scheme cicddemo -configuration Release
           
           echo "🔍 Checking code signing identities..."
           security find-identity -v -p codesigning build.keychain
@@ -177,14 +176,14 @@ jobs:
           xcodebuild archive \
             -workspace cicddemo.xcworkspace \
             -scheme cicddemo \
-            -configuration Release \  
+            -configuration Release \
             -destination "generic/platform=iOS" \
             -archivePath build/cicddemo.xcarchive \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
             PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
             CODE_SIGN_STYLE="Manual" \
-            CODE_SIGN_IDENTITY="Apple Development" \ 
+            CODE_SIGN_IDENTITY="Apple Development" \
             CURRENT_PROJECT_VERSION=1 \
             MARKETING_VERSION=1.0
           
@@ -255,7 +254,6 @@ jobs:
           echo "👥 Team ID: ${{ secrets.APPLE_TEAM_ID }}"
           echo "🔧 Build Type: Release with Development Profile"
           echo "✅ IPA can be installed directly on devices via InstallOnAir"
-          echo "💡 Note: This uses Development profile for installation + Release build for performance"
 
       # Failure notification
       - name: Failure Notification
