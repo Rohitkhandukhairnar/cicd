@@ -47,7 +47,7 @@ jobs:
       # Fix Bundle Identifier in Xcode Project
       - name: Fix Bundle Identifier in Xcode Project
         env:
-          BUNDLE_ID: ${{ secrets.APPLE_BUNDLE_ID }}
+          BUNDLE_ID: ${{ secrets.APPLE_BUNDLE_ID_DEV }}
         run: |
           cd ios
           echo "🔧 Setting bundle identifier: $BUNDLE_ID"
@@ -60,8 +60,8 @@ jobs:
       # Setup code signing for ad hoc
       - name: Setup Ad Hoc Code Signing
         env:
-          IOS_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_DEVELOPMENT_PROFILE_BASE64 }}
-          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_DEVELOPMENT_CERTIFICATE_BASE64 }}
+          IOS_DEVELOPMENT_PROFILE_BASE64: ${{ secrets.IOS_DEVELOPMENT_PROFILE_BASE64 }}
+          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
           IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
@@ -71,14 +71,14 @@ jobs:
           security default-keychain -s build.keychain
           security unlock-keychain -p "$IOS_CERTIFICATE_PASSWORD" build.keychain
           security set-keychain-settings -t 3600 build.keychain
-          echo "📦 Importing development certificate..."
+          echo "📦 Importing distribution certificate..."
           echo "$IOS_CERTIFICATE_BASE64" | base64 --decode > certificate.p12
           security import certificate.p12 -k build.keychain -P "$IOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
           echo "🔧 Setting key partition list..."
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$IOS_CERTIFICATE_PASSWORD" build.keychain
           echo "📱 Importing ad hoc provisioning profile..."
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          echo "$IOS_PROVISION_PROFILE_BASE64" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/build.mobileprovision
+          echo "$IOS_DEVELOPMENT_PROFILE_BASE64" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/build.mobileprovision
           echo "📋 Extracting provisioning profile info..."
           security cms -D -i ~/Library/MobileDevice/Provisioning\ Profiles/build.mobileprovision > profile.plist
           PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" profile.plist)
