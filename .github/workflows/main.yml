@@ -1,4 +1,4 @@
-name: React Native iOS Builds
+name: React Native Builds
 
 on:
   push:
@@ -43,6 +43,25 @@ jobs:
         with:
           name: android-apk-release
           path: android/app/build/outputs/apk/release/app-release.apk
+       # ---- Firebase Setup ----
+      - name: Setup Firebase CLI
+        run: curl -sL https://firebase.tools | bash
+
+      - name: Upload Debug APK to Firebase
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > $GITHUB_WORKSPACE/firebase.json
+          export GOOGLE_APPLICATION_CREDENTIALS=$GITHUB_WORKSPACE/firebase.json
+          firebase appdistribution:distribute android/app/build/outputs/apk/debug/app-debug.apk \
+            --app ${{ secrets.FIREBASE_ANDROID_APP_ID }} \
+            --groups testers
+
+      - name: Upload Release APK to Firebase
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > $GITHUB_WORKSPACE/firebase.json
+          export GOOGLE_APPLICATION_CREDENTIALS=$GITHUB_WORKSPACE/firebase.json
+          firebase appdistribution:distribute android/app/build/outputs/apk/release/app-release.apk \
+            --app ${{ secrets.FIREBASE_ANDROID_APP_ID }} \
+            --groups testers
 
   ios-adhoc-build:
     name: Build iOS IPA (Ad Hoc)
@@ -435,71 +454,3 @@ jobs:
           echo "👥 Team ID: ${{ secrets.APPLE_TEAM_ID }}"
           echo "🏪 Ready for App Store submission"
           echo "✅ App Store IPA is available in the artifacts"
-    
-  send-email:
-    name: Send Email to Testers
-    runs-on: ubuntu-latest
-    needs:
-      - android
-      - ios-adhoc-build
-      - ios-appstore-build
-    steps:
-      - name: Fetch Artifacts URLs
-        id: artifacts
-        run: |
-          echo "Fetching artifact download URLs..."
-          
-          # Fetch artifacts for this workflow run using GitHub API
-          API_URL="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts"
-          
-          RESPONSE=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" $API_URL)
-          
-          # Extract download URLs
-          ANDROID_DEBUG_URL=$(echo "$RESPONSE" | jq -r '.artifacts[] | select(.name=="android-apk") | .archive_download_url')
-          ANDROID_RELEASE_URL=$(echo "$RESPONSE" | jq -r '.artifacts[] | select(.name=="android-apk-release") | .archive_download_url')
-          IOS_ADHOC_URL=$(echo "$RESPONSE" | jq -r '.artifacts[] | select(.name=="ios-app-adhoc") | .archive_download_url')
-          IOS_APPSTORE_URL=$(echo "$RESPONSE" | jq -r '.artifacts[] | select(.name=="ios-app-appstore") | .archive_download_url')
-          
-          echo "ANDROID_DEBUG_URL=$ANDROID_DEBUG_URL" >> $GITHUB_ENV
-          echo "ANDROID_RELEASE_URL=$ANDROID_RELEASE_URL" >> $GITHUB_ENV
-          echo "IOS_ADHOC_URL=$IOS_ADHOC_URL" >> $GITHUB_ENV
-          echo "IOS_APPSTORE_URL=$IOS_APPSTORE_URL" >> $GITHUB_ENV
-
-      - name: Send Email via SendPulse
-        env:
-          SENDPULSE_ID: ${{ secrets.SENDPULSE_ID }}
-          SENDPULSE_SECRET: ${{ secrets.SENDPULSE_SECRET }}
-          ANDROID_DEBUG_URL: ${{ env.ANDROID_DEBUG_URL }}
-          ANDROID_RELEASE_URL: ${{ env.ANDROID_RELEASE_URL }}
-          IOS_ADHOC_URL: ${{ env.IOS_ADHOC_URL }}
-          IOS_APPSTORE_URL: ${{ env.IOS_APPSTORE_URL }}
-        run: |
-          echo "Sending email to testers..."
-          # Get token
-          TOKEN=$(curl -s -X POST "https://api.sendpulse.com/oauth/access_token" \
-            -d "grant_type=client_credentials&client_id=$SENDPULSE_ID&client_secret=$SENDPULSE_SECRET" | jq -r .access_token)
-          
-          # Prepare email JSON
-          read -r -d '' BODY << EOF
-          {
-            "html": "<p>Hello Testers,</p>
-                     <p>New builds are ready:</p>
-                     <ul>
-                       <li><a href='$ANDROID_DEBUG_URL'>Android Debug APK</a></li>
-                       <li><a href='$ANDROID_RELEASE_URL'>Android Release APK</a></li>
-                       <li><a href='$IOS_ADHOC_URL'>iOS Ad Hoc IPA</a></li>
-                       <li><a href='$IOS_APPSTORE_URL'>iOS App Store IPA</a></li>
-                     </ul>
-                     <p>Thanks!</p>",
-            "text": "New builds are ready. Check the links above.",
-            "subject": "New React Native Builds Available",
-            "from": {"name":"Rohit","email":"rohitkhairnar405@gmail.com"},
-            "to":[{"email":"rohitkhairnar405@gmail.com"},{"email":"mavirani.weapplinse@gmail.com"},{"email":"ajchaudhari.weapplinse@gmail.com"}]
-          }
-          EOF
-          
-          # Send email
-          curl -s -X POST "https://api.sendpulse.com/smtp/emails" \
-            -H "Authorization: Bearer $TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "$BODY"
