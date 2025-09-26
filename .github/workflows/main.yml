@@ -247,6 +247,20 @@ jobs:
           name: ios-app-adhoc
           path: ios/build/*.ipa
           retention-days: 30
+        # Setup Firebase CLI
+      - name: Setup Firebase CLI
+        run: curl -sL https://firebase.tools | bash
+
+      # Upload Ad Hoc IPA to Firebase
+      - name: Upload Ad Hoc IPA to Firebase
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > $GITHUB_WORKSPACE/firebase.json
+          export GOOGLE_APPLICATION_CREDENTIALS=$GITHUB_WORKSPACE/firebase.json
+          IPA_FILE=$(ls ios/build/*.ipa | head -n 1)
+          echo "📤 Uploading $IPA_FILE to Firebase..."
+          firebase appdistribution:distribute "$IPA_FILE" \
+            --app ${{ secrets.FIREBASE_IOS_APP_ID }} \
+            --groups testers
 
       # Cleanup
       - name: Cleanup
@@ -438,6 +452,21 @@ jobs:
           name: ios-app-appstore
           path: ios/build/*.ipa
           retention-days: 30
+      # Setup Firebase CLI
+      - name: Setup Firebase CLI
+        run: curl -sL https://firebase.tools | bash
+
+      # Upload App Store IPA to Firebase
+      - name: Upload App Store IPA to Firebase
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > $GITHUB_WORKSPACE/firebase.json
+          export GOOGLE_APPLICATION_CREDENTIALS=$GITHUB_WORKSPACE/firebase.json
+          IPA_FILE=$(ls ios/build/*.ipa | head -n 1)
+          echo "📤 Uploading $IPA_FILE to Firebase..."
+          firebase appdistribution:distribute "$IPA_FILE" \
+            --app ${{ secrets.FIREBASE_IOS_APP_ID }} \
+            --groups testers
+
 
       # Cleanup
       - name: Cleanup
