@@ -54,6 +54,7 @@ jobs:
           firebase appdistribution:distribute android/app/build/outputs/apk/debug/app-debug.apk \
             --app ${{ secrets.FIREBASE_ANDROID_APP_ID }} \
             --groups testers
+            --release-notes "Android debug apk - $(date +'%Y-%m-%d %H:%M')"
 
       - name: Upload Release APK to Firebase
         run: |
@@ -62,6 +63,7 @@ jobs:
           firebase appdistribution:distribute android/app/build/outputs/apk/release/app-release.apk \
             --app ${{ secrets.FIREBASE_ANDROID_APP_ID }} \
             --groups testers
+            --release-notes "Android release apk - $(date +'%Y-%m-%d %H:%M')"
 
   ios-adhoc-build:
     name: Build iOS IPA (Ad Hoc)
@@ -256,11 +258,12 @@ jobs:
         run: |
           echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > $GITHUB_WORKSPACE/firebase.json
           export GOOGLE_APPLICATION_CREDENTIALS=$GITHUB_WORKSPACE/firebase.json
-          IPA_FILE=$(ls ios/build/*.ipa | head -n 1)
+          IPA_FILE=$(ls ios/build/ios-app-adhoc.ipa | head -n 1)
           echo "📤 Uploading $IPA_FILE to Firebase..."
           firebase appdistribution:distribute "$IPA_FILE" \
             --app ${{ secrets.FIREBASE_IOS_APP_ID }} \
             --groups testers
+            --release-notes "iOS AdHoc Build - $(date +'%Y-%m-%d %H:%M')"
 
       # Cleanup
       - name: Cleanup
@@ -461,11 +464,12 @@ jobs:
         run: |
           echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > $GITHUB_WORKSPACE/firebase.json
           export GOOGLE_APPLICATION_CREDENTIALS=$GITHUB_WORKSPACE/firebase.json
-          IPA_FILE=$(ls ios/build/*.ipa | head -n 1)
+          IPA_FILE=$(ls ios/build/ios-app-appstore.ipa | head -n 1)
           echo "📤 Uploading $IPA_FILE to Firebase..."
           firebase appdistribution:distribute "$IPA_FILE" \
             --app ${{ secrets.FIREBASE_IOS_APP_ID }} \
             --groups testers
+            --release-notes "iOS App Store Build - $(date +'%Y-%m-%d %H:%M')"
 
 
       # Cleanup
