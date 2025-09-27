@@ -54,8 +54,6 @@ jobs:
           firebase appdistribution:distribute android/app/build/outputs/apk/debug/app-debug.apk \
             --app ${{ secrets.FIREBASE_ANDROID_APP_ID }} \
             --groups testers
-            --release-notes "Android debug apk - $(date +'%Y-%m-%d %H:%M')"
-
       - name: Upload Release APK to Firebase
         run: |
           echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > $GITHUB_WORKSPACE/firebase.json
@@ -63,8 +61,6 @@ jobs:
           firebase appdistribution:distribute android/app/build/outputs/apk/release/app-release.apk \
             --app ${{ secrets.FIREBASE_ANDROID_APP_ID }} \
             --groups testers
-            --release-notes "Android release apk - $(date +'%Y-%m-%d %H:%M')"
-
   ios-adhoc-build:
     name: Build iOS IPA (Ad Hoc)
     runs-on: macos-latest
@@ -258,13 +254,11 @@ jobs:
         run: |
           echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > $GITHUB_WORKSPACE/firebase.json
           export GOOGLE_APPLICATION_CREDENTIALS=$GITHUB_WORKSPACE/firebase.json
-          IPA_FILE=$(ls ios/build/ios-app-adhoc.ipa | head -n 1)
+          IPA_FILE=$(ls ios/build/*.ipa | head -n 1)
           echo "📤 Uploading $IPA_FILE to Firebase..."
           firebase appdistribution:distribute "$IPA_FILE" \
             --app ${{ secrets.FIREBASE_IOS_APP_ID }} \
             --groups testers
-            --release-notes "iOS AdHoc Build - $(date +'%Y-%m-%d %H:%M')"
-
       # Cleanup
       - name: Cleanup
         if: always()
@@ -280,7 +274,6 @@ jobs:
           echo "👥 Team ID: ${{ secrets.APPLE_TEAM_ID }}"
           echo "📲 IPA can be installed directly on provisioned devices"
           echo "✅ Ad Hoc IPA is available in the artifacts"
-
   ios-appstore-build:
     name: Build iOS IPA (App Store)
     runs-on: macos-latest
@@ -464,14 +457,11 @@ jobs:
         run: |
           echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > $GITHUB_WORKSPACE/firebase.json
           export GOOGLE_APPLICATION_CREDENTIALS=$GITHUB_WORKSPACE/firebase.json
-          IPA_FILE=$(ls ios/build/ios-app-appstore.ipa | head -n 1)
+          IPA_FILE=$(ls ios/build/*.ipa | head -n 1)
           echo "📤 Uploading $IPA_FILE to Firebase..."
           firebase appdistribution:distribute "$IPA_FILE" \
             --app ${{ secrets.FIREBASE_IOS_APP_ID }} \
             --groups testers
-            --release-notes "iOS App Store Build - $(date +'%Y-%m-%d %H:%M')"
-
-
       # Cleanup
       - name: Cleanup
         if: always()
