@@ -54,6 +54,7 @@ jobs:
           firebase appdistribution:distribute android/app/build/outputs/apk/debug/app-debug.apk \
             --app ${{ secrets.FIREBASE_ANDROID_APP_ID }} \
             --groups testers
+            --release-notes "Android debug Apk - $(date +'%Y-%m-%d %H:%M')"
       - name: Upload Release APK to Firebase
         run: |
           echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > $GITHUB_WORKSPACE/firebase.json
@@ -61,6 +62,7 @@ jobs:
           firebase appdistribution:distribute android/app/build/outputs/apk/release/app-release.apk \
             --app ${{ secrets.FIREBASE_ANDROID_APP_ID }} \
             --groups testers
+            --release-notes "Android Release Apk - $(date +'%Y-%m-%d %H:%M')"
   ios-adhoc-build:
     name: Build iOS IPA (Ad Hoc)
     runs-on: macos-latest
@@ -259,6 +261,7 @@ jobs:
           firebase appdistribution:distribute "$IPA_FILE" \
             --app ${{ secrets.FIREBASE_IOS_APP_ID }} \
             --groups testers
+            --release-notes "iOS AdHoc Build - $(date +'%Y-%m-%d %H:%M')"
       # Cleanup
       - name: Cleanup
         if: always()
@@ -462,6 +465,7 @@ jobs:
           firebase appdistribution:distribute "$IPA_FILE" \
             --app ${{ secrets.FIREBASE_IOS_APP_ID }} \
             --groups testers
+            --release-notes "iOS Appstore Build - $(date +'%Y-%m-%d %H:%M')"
       # Cleanup
       - name: Cleanup
         if: always()
