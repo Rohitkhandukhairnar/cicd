@@ -24,6 +24,31 @@ jobs:
         run: |
           npm install
           cd android && ./gradlew clean
+      - name: Bump Android version
+        run: |
+          FILE="android/app/build.gradle"
+      
+          # Extract current versionName
+          VERSION_NAME=$(grep versionName $FILE | awk '{print $2}' | tr -d '"')
+          echo "Current versionName: $VERSION_NAME"
+      
+          # Split into major.minor.patch
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION_NAME"
+      
+          # Increment patch
+          PATCH=$((PATCH + 1))
+          NEW_VERSION_NAME="$MAJOR.$MINOR.$PATCH"
+      
+          # Increment versionCode
+          VERSION_CODE=$(grep versionCode $FILE | awk '{print $2}')
+          NEW_VERSION_CODE=$((VERSION_CODE + 1))
+      
+          # Replace in build.gradle
+          sed -i "s/versionCode .*/versionCode $NEW_VERSION_CODE/" $FILE
+          sed -i "s/versionName .*/versionName \"$NEW_VERSION_NAME\"/" $FILE
+      
+          echo "📦 New Android versionCode=$NEW_VERSION_CODE, versionName=$NEW_VERSION_NAME"
+    
       - name: Build Debug APK
         run: |
           cd android
@@ -180,6 +205,32 @@ jobs:
           echo "✅ Ad hoc exportOptions.plist created"
           echo "📋 Content:"
           cat ios/exportOptions.plist
+
+      - name: Bump iOS version
+        run: |
+          INFO_PLIST="ios/cicddemo/Info.plist"
+      
+          # Get current marketing version
+          VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$INFO_PLIST")
+          echo "Current iOS version: $VERSION"
+      
+          # Split into major.minor.patch
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+      
+          # Increment patch
+          PATCH=$((PATCH + 1))
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+      
+          # Get current build number
+          BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$INFO_PLIST")
+          NEW_BUILD=$((BUILD + 1))
+      
+          # Update Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION" "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEW_BUILD" "$INFO_PLIST"
+      
+          echo "📱 New iOS version=$NEW_VERSION, build=$NEW_BUILD"
+
       # Build iOS app for ad hoc distribution
       - name: Build iOS Ad Hoc App
         env:
@@ -207,8 +258,8 @@ jobs:
             PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
             CODE_SIGN_STYLE="Manual" \
             CODE_SIGN_IDENTITY="${{ secrets.APPLE_SIGNING_IDENTITY }}" \
-            CURRENT_PROJECT_VERSION=1 \
-            MARKETING_VERSION=1.0
+            CURRENT_PROJECT_VERSION=$NEW_BUILD \
+            MARKETING_VERSION=$NEW_VERSION
           
           if [ -d "build/cicddemo.xcarchive" ]; then
             echo "✅ Ad hoc archive created successfully!"
@@ -385,6 +436,31 @@ jobs:
           </dict>
           </plist>
           EOF
+      - name: Bump iOS version
+        run: |
+          INFO_PLIST="ios/cicddemo/Info.plist"
+      
+          # Get current marketing version
+          VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$INFO_PLIST")
+          echo "Current iOS version: $VERSION"
+      
+          # Split into major.minor.patch
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+      
+          # Increment patch
+          PATCH=$((PATCH + 1))
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+      
+          # Get current build number
+          BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$INFO_PLIST")
+          NEW_BUILD=$((BUILD + 1))
+      
+          # Update Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION" "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEW_BUILD" "$INFO_PLIST"
+      
+          echo "📱 New iOS version=$NEW_VERSION, build=$NEW_BUILD"
+
       # Build iOS app for app store
       - name: Build iOS App Store App
         env:
@@ -412,8 +488,8 @@ jobs:
             PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
             CODE_SIGN_STYLE="Manual" \
             CODE_SIGN_IDENTITY="${{ secrets.APPLE_SIGNING_IDENTITY }}" \
-            CURRENT_PROJECT_VERSION=1 \
-            MARKETING_VERSION=1.0
+            CURRENT_PROJECT_VERSION=$NEW_BUILD \
+            MARKETING_VERSION=$NEW_VERSION
           
           if [ -d "build/cicddemo.xcarchive" ]; then
             echo "✅ App Store archive created successfully!"
