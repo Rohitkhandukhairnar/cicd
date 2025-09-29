@@ -280,6 +280,7 @@ jobs:
   ios-appstore-build:
     name: Build iOS IPA (App Store)
     runs-on: macos-latest
+    needs: ios-adhoc-build
     env:
       NODE_VERSION: '18'
 
