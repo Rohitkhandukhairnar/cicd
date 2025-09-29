@@ -311,7 +311,7 @@ jobs:
           echo "📤 Uploading $IPA_FILE to Firebase..."
           firebase appdistribution:distribute "$IPA_FILE" \
             --app ${{ secrets.FIREBASE_IOS_APP_ID }} \
-            --groups testers \
+            --groups adhoc \
             --release-notes "iOS AdHoc Build - $(date +'%Y-%m-%d %H:%M')"
       # Cleanup
       - name: Cleanup
@@ -328,6 +328,7 @@ jobs:
           echo "👥 Team ID: ${{ secrets.APPLE_TEAM_ID }}"
           echo "📲 IPA can be installed directly on provisioned devices"
           echo "✅ Ad Hoc IPA is available in the artifacts"
+          
   ios-appstore-build:
     name: Build iOS IPA (App Store)
     runs-on: macos-latest
@@ -541,7 +542,7 @@ jobs:
           echo "📤 Uploading $IPA_FILE to Firebase..."
           firebase appdistribution:distribute "$IPA_FILE" \
             --app ${{ secrets.FIREBASE_IOS_APP_ID }} \
-            --groups testers \
+            --groups appstore \
             --release-notes "iOS Appstore Build - $(date +'%Y-%m-%d %H:%M')"
       # Cleanup
       - name: Cleanup
