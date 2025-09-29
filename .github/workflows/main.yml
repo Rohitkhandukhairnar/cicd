@@ -86,7 +86,7 @@ jobs:
           export GOOGLE_APPLICATION_CREDENTIALS=$GITHUB_WORKSPACE/firebase.json
           firebase appdistribution:distribute android/app/build/outputs/apk/release/app-release.apk \
             --app ${{ secrets.FIREBASE_ANDROID_APP_ID }} \
-            --groups testers \
+            --groups Android_testers \
             --release-notes "Android Release Apk - $(date +'%Y-%m-%d %H:%M')"
   ios-adhoc-build:
     name: Build iOS IPA (Ad Hoc)
