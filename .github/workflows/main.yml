@@ -78,7 +78,7 @@ jobs:
           export GOOGLE_APPLICATION_CREDENTIALS=$GITHUB_WORKSPACE/firebase.json
           firebase appdistribution:distribute android/app/build/outputs/apk/debug/app-debug.apk \
             --app ${{ secrets.FIREBASE_ANDROID_APP_ID }} \
-            --groups testers \
+            --groups Android_testers \
             --release-notes "Android debug Apk - $(date +'%Y-%m-%d %H:%M')"
       - name: Upload Release APK to Firebase
         run: |
@@ -206,30 +206,30 @@ jobs:
           echo "📋 Content:"
           cat ios/exportOptions.plist
 
-      - name: Bump iOS version
+      - name: Bump iOS AdHoc version
         run: |
           INFO_PLIST="ios/cicddemo/Info.plist"
-      
-          # Get current marketing version
+
+          # Always keep AdHoc major version = 1
           VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$INFO_PLIST")
-          echo "Current iOS version: $VERSION"
-      
-          # Split into major.minor.patch
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-      
-          # Increment patch
+          echo "Current iOS AdHoc version: $VERSION"
+
+          # Force major version = 1
+          IFS='.' read -r _ MINOR PATCH <<< "$VERSION"
+          MINOR=${MINOR:-0}
+          PATCH=${PATCH:-0}
+
           PATCH=$((PATCH + 1))
-          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
-      
-          # Get current build number
+          NEW_VERSION="1.$MINOR.$PATCH"
+
           BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$INFO_PLIST")
           NEW_BUILD=$((BUILD + 1))
-      
-          # Update Info.plist
+
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION" "$INFO_PLIST"
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEW_BUILD" "$INFO_PLIST"
-      
-          echo "📱 New iOS version=$NEW_VERSION, build=$NEW_BUILD"
+
+          echo "📱 New iOS AdHoc version=$NEW_VERSION, build=$NEW_BUILD"
+
 
       # Build iOS app for ad hoc distribution
       - name: Build iOS Ad Hoc App
@@ -437,30 +437,30 @@ jobs:
           </dict>
           </plist>
           EOF
-      - name: Bump iOS version
+      - name: Bump iOS AppStore version
         run: |
           INFO_PLIST="ios/cicddemo/Info.plist"
-      
-          # Get current marketing version
+
+          # Always keep AppStore major version = 2
           VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$INFO_PLIST")
-          echo "Current iOS version: $VERSION"
-      
-          # Split into major.minor.patch
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-      
-          # Increment patch
+          echo "Current iOS AppStore version: $VERSION"
+
+          # Force major version = 2
+          IFS='.' read -r _ MINOR PATCH <<< "$VERSION"
+          MINOR=${MINOR:-0}
+          PATCH=${PATCH:-0}
+
           PATCH=$((PATCH + 1))
-          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
-      
-          # Get current build number
+          NEW_VERSION="2.$MINOR.$PATCH"
+
           BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$INFO_PLIST")
           NEW_BUILD=$((BUILD + 1))
-      
-          # Update Info.plist
+
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION" "$INFO_PLIST"
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEW_BUILD" "$INFO_PLIST"
-      
-          echo "📱 New iOS version=$NEW_VERSION, build=$NEW_BUILD"
+
+          echo "📱 New iOS AppStore version=$NEW_VERSION, build=$NEW_BUILD"
+
 
       # Build iOS app for app store
       - name: Build iOS App Store App
