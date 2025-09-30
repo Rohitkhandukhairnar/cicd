@@ -206,30 +206,24 @@ jobs:
           echo "📋 Content:"
           cat ios/exportOptions.plist
 
-      - name: Bump iOS AdHoc version
+      - name: Bump iOS AdHoc Version
         run: |
           INFO_PLIST="ios/cicddemo/Info.plist"
-
-          # Always keep AdHoc major version = 1
           VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$INFO_PLIST")
-          echo "Current iOS AdHoc version: $VERSION"
+          BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$INFO_PLIST")
 
-          # Force major version = 1
-          IFS='.' read -r _ MINOR PATCH <<< "$VERSION"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
           MINOR=${MINOR:-0}
           PATCH=${PATCH:-0}
 
           PATCH=$((PATCH + 1))
           NEW_VERSION="1.$MINOR.$PATCH"
-
-          BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$INFO_PLIST")
           NEW_BUILD=$((BUILD + 1))
 
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION" "$INFO_PLIST"
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEW_BUILD" "$INFO_PLIST"
 
-          echo "📱 New iOS AdHoc version=$NEW_VERSION, build=$NEW_BUILD"
-
+          echo "✅ iOS AdHoc version: $NEW_VERSION ($NEW_BUILD)"
 
       # Build iOS app for ad hoc distribution
       - name: Build iOS Ad Hoc App
@@ -437,29 +431,25 @@ jobs:
           </dict>
           </plist>
           EOF
-      - name: Bump iOS AppStore version
+          
+      - name: Bump iOS AppStore Version
         run: |
           INFO_PLIST="ios/cicddemo/Info.plist"
-
-          # Always keep AppStore major version = 2
           VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$INFO_PLIST")
-          echo "Current iOS AppStore version: $VERSION"
+          BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$INFO_PLIST")
 
-          # Force major version = 2
-          IFS='.' read -r _ MINOR PATCH <<< "$VERSION"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
           MINOR=${MINOR:-0}
           PATCH=${PATCH:-0}
 
           PATCH=$((PATCH + 1))
           NEW_VERSION="2.$MINOR.$PATCH"
-
-          BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$INFO_PLIST")
           NEW_BUILD=$((BUILD + 1))
 
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION" "$INFO_PLIST"
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEW_BUILD" "$INFO_PLIST"
 
-          echo "📱 New iOS AppStore version=$NEW_VERSION, build=$NEW_BUILD"
+          echo "✅ iOS AppStore version: $NEW_VERSION ($NEW_BUILD)"
 
 
       # Build iOS app for app store
