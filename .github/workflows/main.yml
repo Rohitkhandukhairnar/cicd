@@ -24,7 +24,7 @@ jobs:
         run: |
           npm install
           cd android && ./gradlew clean
-      - name: Bump Android version
+      - name: Bump Android version (Debug)
         run: |
           FILE="android/app/build.gradle"
       
@@ -47,7 +47,7 @@ jobs:
           sed -i "s/versionCode .*/versionCode $NEW_VERSION_CODE/" $FILE
           sed -i "s/versionName .*/versionName \"$NEW_VERSION_NAME\"/" $FILE
       
-          echo "📦 New Android versionCode=$NEW_VERSION_CODE, versionName=$NEW_VERSION_NAME"
+          echo "📦 New Debug versionCode=$NEW_VERSION_CODE, versionName=$NEW_VERSION_NAME"
     
       - name: Build Debug APK
         run: |
@@ -58,6 +58,24 @@ jobs:
         with:
           name: android-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Bump Android version (Release)
+        run: |
+          FILE="android/app/build.gradle"
+      
+          VERSION_NAME=$(grep versionName $FILE | awk '{print $2}' | tr -d '"')
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION_NAME"
+          PATCH=$((PATCH + 1))
+          NEW_VERSION_NAME="$MAJOR.$MINOR.$PATCH"
+      
+          VERSION_CODE=$(grep versionCode $FILE | awk '{print $2}')
+          NEW_VERSION_CODE=$((VERSION_CODE + 1))
+      
+          sed -i "s/versionCode .*/versionCode $NEW_VERSION_CODE/" $FILE
+          sed -i "s/versionName .*/versionName \"$NEW_VERSION_NAME\"/" $FILE
+      
+          echo "📦 New Release versionCode=$NEW_VERSION_CODE, versionName=$NEW_VERSION_NAME"
+
           
       - name: Build Release APK
         run: |
