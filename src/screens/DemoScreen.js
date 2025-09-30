@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Alert,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -38,7 +39,7 @@ function DemoScreen() {
                 styles.primaryButton,
                 pressed && styles.buttonPressed,
               ]}
-              onPress={() => {}}>
+              onPress={() => {Alert.alert("get started","get started")}}>
               <Text style={styles.primaryButtonText}>Get Started</Text>
             </Pressable>
             <Pressable
@@ -46,7 +47,7 @@ function DemoScreen() {
                 styles.secondaryButton,
                 pressed && styles.secondaryButtonPressed,
               ]}
-              onPress={() => {}}>
+              onPress={() => {Alert.alert("learn more","learn more")}}>
               <Text style={styles.secondaryButtonText}>Learn More</Text>
             </Pressable>
           </View>
@@ -136,7 +137,7 @@ const styles = StyleSheet.create({
     shadowOffset: {width: 0, height: 6},
     shadowRadius: 12,
     // Android elevation
-    elevation: 4,
+    elevation: 10,
   },
   cardTitle: {
     fontSize: 18,
@@ -204,7 +205,7 @@ const styles = StyleSheet.create({
     shadowOffset: {width: 0, height: 3},
     shadowRadius: 8,
     // Android elevation
-    elevation: 2,
+    elevation: 10,
   },
   featureEmoji: {
     fontSize: 22,
